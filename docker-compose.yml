@@ -1,0 +1,52 @@
+
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: orderflow-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: orderflow
+      MYSQL_USER: orderflow
+      MYSQL_PASSWORD: orderflow
+      MYSQL_ROOT_PASSWORD: root
+    ports:
+      - "3308:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - orderflow-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: orderflow-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - orderflow-network
+
+  rabbitmq:
+    image: rabbitmq:4-management
+    container_name: orderflow-rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: orderflow
+      RABBITMQ_DEFAULT_PASS: orderflow
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - orderflow-network
+
+volumes:
+  mysql_data:
+  redis_data:
+  rabbitmq_data:
+
+networks:
+  orderflow-network:
+    driver: bridge

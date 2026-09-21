@@ -1,0 +1,27 @@
+spring:
+  application:
+    name: orderflow
+
+  datasource:
+    url: jdbc:mysql://localhost:3308/orderflow
+    username: orderflow
+    password: orderflow
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+
+  flyway:
+    enabled: true
+
+  data:
+    redis:
+      host: localhost
+      port: 6379
+
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: orderflow
+    password: orderflow
