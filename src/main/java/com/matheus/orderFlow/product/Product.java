@@ -63,10 +63,10 @@ class Product {
 
     }
 
-    public Product() {
+    protected Product() {
     }
 
-    public Product(String name, String description, BigDecimal price) {
+    Product(String name, String description, BigDecimal price) {
         validate(name, description, price);
 
         this.name = name;
