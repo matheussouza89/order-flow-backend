@@ -52,7 +52,7 @@ public class ProductControllerTest {
         when(productService.getProduct(id))
                 .thenReturn(product);
 
-        mockMvc.perform(get("/product/{id}", id))
+        mockMvc.perform(get("/products/{id}", id))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.name").value("Notebook"))
                 .andExpect(jsonPath("$.description")
@@ -66,7 +66,7 @@ public class ProductControllerTest {
     void shouldThrowNotFoundExceptionWhenProductNotFound() throws Exception {
         UUID id = UUID.randomUUID();
         when(productService.getProduct(id)).thenThrow(NotFoundException.class);
-        mockMvc.perform(get("/product/{id}", id)).andExpect(status().isNotFound());
+        mockMvc.perform(get("/products/{id}", id)).andExpect(status().isNotFound());
     }
 
     @Test
@@ -80,7 +80,7 @@ public class ProductControllerTest {
         when(productService.getAllProducts())
                 .thenReturn(List.of(product));
 
-        mockMvc.perform(get("/product"))
+        mockMvc.perform(get("/products"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$").isArray())
                 .andExpect(jsonPath("$.length()").value(1))
@@ -96,7 +96,7 @@ public class ProductControllerTest {
     void shouldReturnEmptyListWhenThereAreNoProducts() throws Exception {
         when(productService.getAllProducts()).thenReturn(List.of());
 
-        mockMvc.perform(get("/product"))
+        mockMvc.perform(get("/products"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$").isArray())
                 .andExpect(jsonPath("$.length()").value(0));
@@ -124,7 +124,7 @@ public class ProductControllerTest {
                 .thenReturn(updatedProduct);
 
         mockMvc.perform(
-                        put("/product/{id}", id)
+                        put("/products/{id}", id)
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(objectMapper.writeValueAsString(dto))
                 )
@@ -150,7 +150,7 @@ public class ProductControllerTest {
         );
 
         when(productService.updateProduct(id, dto)).thenThrow(NotFoundException.class);
-        mockMvc.perform(put("/product/{id}", id)
+        mockMvc.perform(put("/products/{id}", id)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isNotFound());
@@ -175,7 +175,7 @@ public class ProductControllerTest {
                 .thenThrow(new DomainValidationException(
                         "price", "Product price cannot be negative"));
 
-        mockMvc.perform(put("/product/{id}", id)
+        mockMvc.perform(put("/products/{id}", id)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(invalidJson))
                 .andExpect(status().isBadRequest())
@@ -202,7 +202,7 @@ public class ProductControllerTest {
 
         when(productService.createProduct(any(ProductDto.class))).thenReturn(createdProduct);
 
-        mockMvc.perform(post("/product")
+        mockMvc.perform(post("/products")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isCreated())
@@ -231,7 +231,7 @@ public class ProductControllerTest {
                 .thenThrow(new DomainValidationException(
                         "price", "Product price cannot be negative"));
 
-        mockMvc.perform(post("/product")
+        mockMvc.perform(post("/products")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(invalidJson))
                 .andExpect(status().isBadRequest())
@@ -258,7 +258,7 @@ public class ProductControllerTest {
                 .thenThrow(new DomainValidationException(
                         "name", "Product name cannot be empty"));
 
-        mockMvc.perform(post("/product")
+        mockMvc.perform(post("/products")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(invalidJson))
                 .andExpect(status().isBadRequest())
@@ -276,7 +276,7 @@ public class ProductControllerTest {
                     "price":
                 """;
 
-        mockMvc.perform(post("/product")
+        mockMvc.perform(post("/products")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(invalidJson))
                 .andExpect(status().isBadRequest());
@@ -290,7 +290,7 @@ public class ProductControllerTest {
 
         doNothing().when(productService).deleteProduct(id);
 
-        mockMvc.perform(delete("/product/{id}", id))
+        mockMvc.perform(delete("/products/{id}", id))
                 .andExpect(status().isNoContent());
 
         verify(productService).deleteProduct(id);
@@ -301,6 +301,6 @@ public class ProductControllerTest {
         UUID id = UUID.randomUUID();
         doThrow(NotFoundException.class).when(productService).deleteProduct(id);
 
-        mockMvc.perform(delete("/product/{id}", id)).andExpect(status().isNotFound());
+        mockMvc.perform(delete("/products/{id}", id)).andExpect(status().isNotFound());
     }
 }

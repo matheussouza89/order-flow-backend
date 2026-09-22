@@ -27,7 +27,7 @@ class ProductIT extends AbstractIntegrationTest {
                 }
                 """;
 
-        mockMvc.perform(post("/product")
+        mockMvc.perform(post("/products")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json))
                 .andExpect(status().isCreated())
@@ -49,7 +49,7 @@ class ProductIT extends AbstractIntegrationTest {
                 }
                 """;
 
-        String response = mockMvc.perform(post("/product")
+        String response = mockMvc.perform(post("/products")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json))
                 .andExpect(status().isCreated())
@@ -59,7 +59,7 @@ class ProductIT extends AbstractIntegrationTest {
 
         String id = JsonPath.read(response, "$.id");
 
-        mockMvc.perform(get("/product/{id}", id))
+        mockMvc.perform(get("/products/{id}", id))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(id))
                 .andExpect(jsonPath("$.name").value("Smartphone"))
@@ -76,7 +76,7 @@ class ProductIT extends AbstractIntegrationTest {
                 }
                 """;
 
-        String response = mockMvc.perform(post("/product")
+        String response = mockMvc.perform(post("/products")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json))
                 .andExpect(status().isCreated())
@@ -86,20 +86,20 @@ class ProductIT extends AbstractIntegrationTest {
 
         String id = JsonPath.read(response, "$.id");
 
-        mockMvc.perform(delete("/product/{id}", id))
+        mockMvc.perform(delete("/products/{id}", id))
                 .andExpect(status().isNoContent());
 
-        mockMvc.perform(get("/product/{id}", id))
+        mockMvc.perform(get("/products/{id}", id))
                 .andExpect(status().isNotFound());
 
-        mockMvc.perform(get("/product"))
+        mockMvc.perform(get("/products"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(0));
     }
 
     @Test
     void shouldReturnNotFoundForUnknownId() throws Exception {
-        mockMvc.perform(get("/product/{id}", UUID.randomUUID()))
+        mockMvc.perform(get("/products/{id}", UUID.randomUUID()))
                 .andExpect(status().isNotFound());
     }
 
@@ -113,7 +113,7 @@ class ProductIT extends AbstractIntegrationTest {
                 }
                 """.formatted("a".repeat(1001));
 
-        mockMvc.perform(post("/product")
+        mockMvc.perform(post("/products")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json))
                 .andExpect(status().isBadRequest());

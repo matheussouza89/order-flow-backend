@@ -17,7 +17,7 @@ import java.util.UUID;
         description = "Product management endpoints"
 )
 @RestController
-@RequestMapping("product")
+@RequestMapping("products")
 @RequiredArgsConstructor
 class ProductController {
     private final ProductService productService;
