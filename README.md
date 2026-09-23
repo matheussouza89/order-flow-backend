@@ -1,5 +1,7 @@
 # OrderFlow
 
+[![CI](https://github.com/matheussouza89/order-flow-backend/actions/workflows/ci.yml/badge.svg)](https://github.com/matheussouza89/order-flow-backend/actions/workflows/ci.yml)
+
 API REST para gestão de pedidos, construída em Spring Boot 4 e Java 21.
 
 O projeto é um estudo de arquitetura em evolução: cada decisão de desenho está
@@ -249,6 +251,7 @@ Nome, preço e total vêm do catálogo e do domínio — nunca do cliente.
 - [x] Tratamento global de erros com formato único e logging por severidade
 - [x] Organização por funcionalidade com entidade e repositório encapsulados
 - [x] 68 testes, separados por velocidade (unitários e integração)
+- [x] Pipeline de CI rodando `mvn verify` a cada push
 - [x] Documentação OpenAPI
 
 **Próximos passos**
@@ -260,4 +263,3 @@ Nome, preço e total vêm do catálogo e do domínio — nunca do cliente.
 - [ ] Paginação nas listagens
 - [ ] Credenciais por variável de ambiente e profiles por ambiente
 - [ ] Autenticação com Spring Security + JWT
-- [ ] Pipeline de CI rodando `mvn verify`
