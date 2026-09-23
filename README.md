@@ -3,9 +3,9 @@
 API REST para gestão de pedidos, construída em Spring Boot 4 e Java 21.
 
 O projeto é um estudo de arquitetura em evolução: cada decisão de desenho está
-documentada abaixo, com o motivo por trás dela. O domínio de **produtos** está
-completo; o de **pedidos**, com mensageria e cache, é o próximo passo (ver
-[Roadmap](#roadmap)).
+documentada abaixo, com o motivo por trás dela. Os domínios de **produtos** e
+**pedidos** estão completos; mensageria, cache e transições de status são os
+próximos passos (ver [Roadmap](#roadmap)).
 
 ---
 
@@ -16,8 +16,8 @@ completo; o de **pedidos**, com mensageria e cache, é o próximo passo (ver
 | Linguagem | Java 21 |
 | Framework | Spring Boot 4.1.1 (Web MVC, Data JPA, Validation) |
 | Banco | MySQL 8.4 + Flyway |
-| Mensageria | RabbitMQ *(provisionado, em uso a partir de `Order`)* |
-| Cache | Redis *(provisionado, em uso a partir de `Order`)* |
+| Mensageria | RabbitMQ *(provisionado, em uso a partir dos eventos de pedido)* |
+| Cache | Redis *(provisionado, em uso a partir do carrinho)* |
 | Documentação | springdoc-openapi (Swagger UI) |
 | Testes | JUnit 5, Mockito, Testcontainers |
 | Build | Maven |
@@ -42,7 +42,7 @@ Rode a aplicação:
 
 | Recurso | URL |
 |---|---|
-| API | http://localhost:8080/product |
+| API | http://localhost:8080/products |
 | Swagger UI | http://localhost:8080/swagger-ui.html |
 | Health check | http://localhost:8080/actuator/health |
 
@@ -57,13 +57,13 @@ alteração:
 ./mvnw test
 ```
 
-Roda os **41 testes unitários** em poucos segundos, sem Docker.
+Roda os **56 testes unitários** em poucos segundos, sem Docker.
 
 ```bash
 ./mvnw verify
 ```
 
-Roda os unitários **mais os 5 de integração**, que sobem MySQL, Redis e
+Roda os unitários **mais os 12 de integração**, que sobem MySQL, Redis e
 RabbitMQ reais via Testcontainers.
 
 A separação é feita por convenção de nome: o Surefire pega `*Test.java`, o
@@ -78,6 +78,7 @@ Failsafe pega `*IT.java`.
 ```
 com.matheus.orderFlow/
 ├── product/          Product, ProductService, ProductRepository, ProductController, DTOs
+├── order/            Order, OrderItem, OrderStatus, OrderService, OrderController, DTOs
 └── shared/
     ├── config/       configuração da aplicação
     └── exception/    exceções e tratamento global
@@ -110,7 +111,7 @@ A entidade `Product` valida as próprias invariantes no construtor e no
 `update()`, lançando `DomainValidationException` com o campo que falhou:
 
 ```java
-public Product(String name, String description, BigDecimal price) {
+Product(String name, String description, BigDecimal price) {
     validate(name, description, price);
     ...
 }
@@ -149,6 +150,48 @@ O `GlobalExceptionHandler` também registra em log com níveis distintos: `debug
 para 404 (operação normal), `warn` para validação (padrões de uso incorreto) e
 `error` com stack trace para falhas não previstas (bug a investigar).
 
+A validação de domínio acontece em transação: criar um pedido grava várias
+linhas, e um item inválido no meio não pode deixar um pedido órfão no banco.
+
+### Pedido guarda um retrato do catálogo, não uma referência
+
+O `OrderItem` copia `productName` e `unitPrice` no momento da compra, em vez de
+apontar para o produto:
+
+```
+order_items
+  product_id    ← referência, sem chave estrangeira
+  product_name  ← cópia
+  unit_price    ← cópia
+```
+
+Parece duplicação, mas são fatos diferentes: *"o teclado custa R$ 100"* é o
+catálogo hoje; *"neste pedido o teclado foi vendido por R$ 100"* é um acordo do
+passado. Mudar o preço não pode reescrever o histórico de vendas — um pedido é
+um documento fiscal, não uma consulta viva.
+
+A consequência é a ausência de chave estrangeira para `products`. Com ela,
+apagar um produto já vendido seria impossível, e o acoplamento entre os
+agregados voltaria pela camada do banco. Sem ela, o pedido continua legível
+mesmo que o produto deixe de existir, e a integridade é garantida na aplicação:
+o `OrderService` consulta o `ProductService`, que lança 404 se o produto não
+existir.
+
+O caso oposto seria um carrinho, que *deve* refletir o preço atual — ali a
+chave estrangeira é a escolha certa.
+
+### Agregados com fronteira garantida pelo compilador
+
+`Order` e `OrderItem` formam um agregado: vivem no mesmo pacote e se relacionam
+por `@OneToMany`, com a `Order` como única porta de entrada — ela vincula os
+itens a si mesma e recalcula o total, e nenhum dos dois é acessível de fora.
+
+Já `Product` é outro agregado, em outro pacote e package-private. Isso torna
+*impossível* declarar `@ManyToOne Product` dentro de `OrderItem`: a referência
+entre agregados é por `UUID`, e o dado vem pelo `ProductService`.
+
+O que normalmente é convenção de equipe aqui é regra que o compilador cobra.
+
 ### Testes de integração com infraestrutura real
 
 Os testes unitários cobrem regras e casos de borda com tudo mockado. Os de
@@ -165,13 +208,35 @@ desenvolvimento local.
 
 ## Endpoints
 
+**Produtos**
+
 | Método | Rota | Status | Descrição |
 |---|---|---|---|
-| `GET` | `/product` | 200 | Lista todos os produtos |
-| `GET` | `/product/{id}` | 200 / 404 | Busca por id |
-| `POST` | `/product` | 201 + `Location` | Cria um produto |
-| `PUT` | `/product/{id}` | 200 / 404 | Atualiza um produto |
-| `DELETE` | `/product/{id}` | 204 / 404 | Remove um produto |
+| `GET` | `/products` | 200 | Lista todos os produtos |
+| `GET` | `/products/{id}` | 200 / 404 | Busca por id |
+| `POST` | `/products` | 201 + `Location` | Cria um produto |
+| `PUT` | `/products/{id}` | 200 / 404 | Atualiza um produto |
+| `DELETE` | `/products/{id}` | 204 / 404 | Remove um produto |
+
+**Pedidos**
+
+| Método | Rota | Status | Descrição |
+|---|---|---|---|
+| `GET` | `/orders` | 200 | Lista todos os pedidos |
+| `GET` | `/orders/{id}` | 200 / 404 | Busca por id |
+| `POST` | `/orders` | 201 + `Location` | Cria um pedido |
+
+O corpo do `POST /orders` envia apenas o que o cliente pode decidir:
+
+```json
+{
+  "items": [
+    { "productId": "3f2a8c11-...", "quantity": 2 }
+  ]
+}
+```
+
+Nome, preço e total vêm do catálogo e do domínio — nunca do cliente.
 
 ---
 
@@ -180,18 +245,19 @@ desenvolvimento local.
 **Concluído**
 
 - [x] Domínio de produtos com validação encapsulada na entidade
+- [x] Domínio de pedidos com itens, cálculo de total e retrato do catálogo
 - [x] Tratamento global de erros com formato único e logging por severidade
 - [x] Organização por funcionalidade com entidade e repositório encapsulados
-- [x] 46 testes, separados por velocidade (unitários e integração)
+- [x] 68 testes, separados por velocidade (unitários e integração)
 - [x] Documentação OpenAPI
 
 **Próximos passos**
 
-- [ ] Domínio de pedidos (`Order`, `OrderItem`) com cálculo de total
 - [ ] Publicação de evento no RabbitMQ a cada pedido criado
 - [ ] Consumer processando o evento de forma assíncrona
-- [ ] Cache de consultas de produto no Redis
-- [ ] Paginação em `GET /product`
+- [ ] Transições de status do pedido (`confirm`, `cancel`)
+- [ ] Carrinho no Redis, com checkout gerando o pedido
+- [ ] Paginação nas listagens
 - [ ] Credenciais por variável de ambiente e profiles por ambiente
 - [ ] Autenticação com Spring Security + JWT
 - [ ] Pipeline de CI rodando `mvn verify`
