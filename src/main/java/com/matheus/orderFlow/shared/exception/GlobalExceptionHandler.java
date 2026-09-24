@@ -113,6 +113,8 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Map<String, Object>> handleInvalidStatusTransition(
             InvalidStatusTransitionException exception
     ) {
+        log.warn("Invalid status transition: {}", exception.getMessage());
+
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("status", 409);
         response.put("message", exception.getMessage());
