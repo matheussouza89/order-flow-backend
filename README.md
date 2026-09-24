@@ -6,8 +6,8 @@ API REST para gestão de pedidos, construída em Spring Boot 4 e Java 21.
 
 O projeto é um estudo de arquitetura em evolução: cada decisão de desenho está
 documentada abaixo, com o motivo por trás dela. Os domínios de **produtos** e
-**pedidos** estão completos; mensageria, cache e transições de status são os
-próximos passos (ver [Roadmap](#roadmap)).
+**pedidos** estão completos, incluindo o ciclo de vida do pedido; mensageria e
+carrinho são os próximos passos (ver [Roadmap](#roadmap)).
 
 ---
 
@@ -59,13 +59,13 @@ alteração:
 ./mvnw test
 ```
 
-Roda os **56 testes unitários** em poucos segundos, sem Docker.
+Roda os **82 testes unitários** em poucos segundos, sem Docker.
 
 ```bash
 ./mvnw verify
 ```
 
-Roda os unitários **mais os 12 de integração**, que sobem MySQL, Redis e
+Roda os unitários **mais os 18 de integração**, que sobem MySQL, Redis e
 RabbitMQ reais via Testcontainers.
 
 A separação é feita por convenção de nome: o Surefire pega `*Test.java`, o
@@ -194,6 +194,33 @@ entre agregados é por `UUID`, e o dado vem pelo `ProductService`.
 
 O que normalmente é convenção de equipe aqui é regra que o compilador cobra.
 
+### Ciclo de vida do pedido como máquina de estados
+
+O pedido avança por ações de negócio, não por atribuição de status:
+
+```
+PENDING ──→ CONFIRMED ──→ SHIPPED ──→ DELIVERED
+   │            │
+   └────────────┴──→ CANCELLED
+```
+
+| Ação | Permitida a partir de |
+|---|---|
+| `confirm` | `PENDING` |
+| `ship` | `CONFIRMED` |
+| `deliver` | `SHIPPED` |
+| `cancel` | `PENDING`, `CONFIRMED` |
+
+Não existe um `PATCH /orders/{id}/status` recebendo o novo valor. O cliente
+solicita uma **ação** e o domínio decide o resultado — caso contrário, bastaria
+enviar `DELIVERED` para pular o fluxo inteiro. Cada transição é um método da
+entidade que valida o estado atual antes de mudar.
+
+Transição inválida responde **409 Conflict**, não 400: a requisição está
+correta e o pedido é válido; o que impede a operação é o estado atual do
+recurso. Por isso o corpo desse erro não traz `errors` — não há campo enviado
+pelo cliente a que apontar.
+
 ### Testes de integração com infraestrutura real
 
 Os testes unitários cobrem regras e casos de borda com tudo mockado. Os de
@@ -227,6 +254,10 @@ desenvolvimento local.
 | `GET` | `/orders` | 200 | Lista todos os pedidos |
 | `GET` | `/orders/{id}` | 200 / 404 | Busca por id |
 | `POST` | `/orders` | 201 + `Location` | Cria um pedido |
+| `POST` | `/orders/{id}/confirm` | 200 / 404 / 409 | Confirma o pedido |
+| `POST` | `/orders/{id}/ship` | 200 / 404 / 409 | Marca como enviado |
+| `POST` | `/orders/{id}/deliver` | 200 / 404 / 409 | Marca como entregue |
+| `POST` | `/orders/{id}/cancel` | 200 / 404 / 409 | Cancela o pedido |
 
 O corpo do `POST /orders` envia apenas o que o cliente pode decidir:
 
@@ -248,9 +279,10 @@ Nome, preço e total vêm do catálogo e do domínio — nunca do cliente.
 
 - [x] Domínio de produtos com validação encapsulada na entidade
 - [x] Domínio de pedidos com itens, cálculo de total e retrato do catálogo
+- [x] Ciclo de vida do pedido com transições validadas no domínio
 - [x] Tratamento global de erros com formato único e logging por severidade
 - [x] Organização por funcionalidade com entidade e repositório encapsulados
-- [x] 68 testes, separados por velocidade (unitários e integração)
+- [x] 100 testes, separados por velocidade (unitários e integração)
 - [x] Pipeline de CI rodando `mvn verify` a cada push
 - [x] Documentação OpenAPI
 
@@ -258,7 +290,6 @@ Nome, preço e total vêm do catálogo e do domínio — nunca do cliente.
 
 - [ ] Publicação de evento no RabbitMQ a cada pedido criado
 - [ ] Consumer processando o evento de forma assíncrona
-- [ ] Transições de status do pedido (`confirm`, `cancel`)
 - [ ] Carrinho no Redis, com checkout gerando o pedido
 - [ ] Paginação nas listagens
 - [ ] Credenciais por variável de ambiente e profiles por ambiente

@@ -1,6 +1,7 @@
 package com.matheus.orderFlow.order;
 
 import com.matheus.orderFlow.shared.exception.DomainValidationException;
+import com.matheus.orderFlow.shared.exception.InvalidStatusTransitionException;
 import jakarta.persistence.*;
 import lombok.Getter;
 import org.springframework.data.annotation.CreatedDate;
@@ -73,5 +74,33 @@ class Order {
         this.total = items.stream()
                 .map(OrderItem::getSubtotal)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    void confirm() {
+        if (status != OrderStatus.PENDING) {
+            throw new InvalidStatusTransitionException("Only pending orders can be confirmed");
+        }
+        this.status = OrderStatus.CONFIRMED;
+    }
+
+    void ship() {
+        if (status != OrderStatus.CONFIRMED) {
+            throw new InvalidStatusTransitionException("Only confirmed orders can be shipped");
+        }
+        this.status = OrderStatus.SHIPPED;
+    }
+
+    void deliver() {
+        if (status != OrderStatus.SHIPPED) {
+            throw new InvalidStatusTransitionException("Only shipped orders can be delivered");
+        }
+        this.status = OrderStatus.DELIVERED;
+    }
+
+    void cancel() {
+        if (status != OrderStatus.PENDING && status != OrderStatus.CONFIRMED) {
+            throw new InvalidStatusTransitionException("Only pending or confirmed orders can be cancelled");
+        }
+        this.status = OrderStatus.CANCELLED;
     }
 }

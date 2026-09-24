@@ -176,4 +176,92 @@ class OrderIT extends AbstractIntegrationTest {
         mockMvc.perform(get("/orders/{id}", UUID.randomUUID()))
                 .andExpect(status().isNotFound());
     }
+
+    private String createOrder(String productId) throws Exception {
+        String response = mockMvc.perform(post("/orders")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(orderJson(productId, 1)))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        return JsonPath.read(response, "$.id");
+    }
+
+    private void transition(String orderId, String action, String expectedStatus) throws Exception {
+        mockMvc.perform(post("/orders/{id}/{action}", orderId, action))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value(expectedStatus));
+    }
+
+    @Test
+    void shouldWalkThroughTheWholeDeliveryFlow() throws Exception {
+        String orderId = createOrder(createProduct("Teclado", "100.00"));
+
+        mockMvc.perform(get("/orders/{id}", orderId))
+                .andExpect(jsonPath("$.status").value("PENDING"));
+
+        transition(orderId, "confirm", "CONFIRMED");
+        transition(orderId, "ship", "SHIPPED");
+        transition(orderId, "deliver", "DELIVERED");
+
+        mockMvc.perform(get("/orders/{id}", orderId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("DELIVERED"));
+    }
+
+    @Test
+    void shouldPersistStatusBetweenRequests() throws Exception {
+        String orderId = createOrder(createProduct("Mouse", "50.00"));
+
+        transition(orderId, "confirm", "CONFIRMED");
+
+        mockMvc.perform(get("/orders"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].status").value("CONFIRMED"));
+    }
+
+    @Test
+    void shouldCancelOrderBeforeShipping() throws Exception {
+        String orderId = createOrder(createProduct("Monitor", "800.00"));
+
+        transition(orderId, "confirm", "CONFIRMED");
+        transition(orderId, "cancel", "CANCELLED");
+
+        mockMvc.perform(get("/orders/{id}", orderId))
+                .andExpect(jsonPath("$.status").value("CANCELLED"));
+    }
+
+    @Test
+    void shouldRejectCancellingAShippedOrder() throws Exception {
+        String orderId = createOrder(createProduct("Headset", "300.00"));
+
+        transition(orderId, "confirm", "CONFIRMED");
+        transition(orderId, "ship", "SHIPPED");
+
+        mockMvc.perform(post("/orders/{id}/cancel", orderId))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").isNotEmpty());
+
+        mockMvc.perform(get("/orders/{id}", orderId))
+                .andExpect(jsonPath("$.status").value("SHIPPED"));
+    }
+
+    @Test
+    void shouldRejectSkippingAStepInTheFlow() throws Exception {
+        String orderId = createOrder(createProduct("Webcam", "250.00"));
+
+        mockMvc.perform(post("/orders/{id}/ship", orderId))
+                .andExpect(status().isConflict());
+
+        mockMvc.perform(get("/orders/{id}", orderId))
+                .andExpect(jsonPath("$.status").value("PENDING"));
+    }
+
+    @Test
+    void shouldReturnNotFoundWhenConfirmingUnknownOrder() throws Exception {
+        mockMvc.perform(post("/orders/{id}/confirm", UUID.randomUUID()))
+                .andExpect(status().isNotFound());
+    }
 }

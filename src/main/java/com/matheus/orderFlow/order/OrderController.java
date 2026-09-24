@@ -41,4 +41,24 @@ class OrderController {
 
         return ResponseEntity.created(location).body(created);
     }
+
+    @PostMapping("/{id}/confirm")
+    public OrderResponse confirmOrder(@PathVariable UUID id) {
+        return orderService.confirmOrder(id);
+    }
+
+    @PostMapping("/{id}/ship")
+    public OrderResponse shipOrder(@PathVariable UUID id) {
+        return orderService.shipOrder(id);
+    }
+
+    @PostMapping("/{id}/deliver")
+    public OrderResponse deliverOrder(@PathVariable UUID id) {
+        return orderService.deliverOrder(id);
+    }
+
+    @PostMapping("/{id}/cancel")
+    public OrderResponse cancelOrder(@PathVariable UUID id) {
+        return orderService.cancelOrder(id);
+    }
 }

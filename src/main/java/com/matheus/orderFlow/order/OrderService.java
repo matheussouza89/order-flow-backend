@@ -46,4 +46,35 @@ public class OrderService {
                 .orElseThrow(() -> new NotFoundException(orderId));
     }
 
+    @Transactional
+    public OrderResponse confirmOrder(UUID orderId) {
+        Order order = findOrThrow(orderId);
+        order.confirm();
+        orderRepository.save(order);
+        return OrderResponse.from(order);
+    }
+
+    @Transactional
+    public OrderResponse shipOrder(UUID orderId) {
+        Order order = findOrThrow(orderId);
+        order.ship();
+        orderRepository.save(order);
+        return OrderResponse.from(order);
+    }
+
+    @Transactional
+    public OrderResponse deliverOrder(UUID orderId) {
+        Order order = findOrThrow(orderId);
+        order.deliver();
+        orderRepository.save(order);
+        return OrderResponse.from(order);
+    }
+
+    @Transactional
+    public OrderResponse cancelOrder(UUID orderId) {
+        Order order = findOrThrow(orderId);
+        order.cancel();
+        orderRepository.save(order);
+        return OrderResponse.from(order);
+    }
 }

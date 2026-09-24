@@ -2,18 +2,24 @@ package com.matheus.orderFlow.order;
 
 import com.matheus.orderFlow.product.ProductResponse;
 import com.matheus.orderFlow.shared.exception.DomainValidationException;
+import com.matheus.orderFlow.shared.exception.InvalidStatusTransitionException;
 import com.matheus.orderFlow.shared.exception.NotFoundException;
 import com.matheus.orderFlow.product.ProductService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.EnumSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -41,6 +47,53 @@ public class OrderServiceTest {
     private void returnSavedOrder() {
         when(orderRepository.save(any(Order.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
+    }
+
+    private Order orderAt(OrderStatus status) {
+        Order order = new Order(
+                List.of(
+                        new OrderItem(UUID.randomUUID(), "Teclado", new BigDecimal("100.00"), 2)
+                )
+        );
+
+        if (status == OrderStatus.PENDING) return order;
+
+        if (status == OrderStatus.CANCELLED) {
+            order.cancel();
+            return order;
+        }
+
+        order.confirm();
+        if (status == OrderStatus.CONFIRMED) return order;
+
+        order.ship();
+        if (status == OrderStatus.SHIPPED) return order;
+
+
+        order.deliver();
+        return order;
+    }
+
+    private static Stream<OrderStatus> statusesThatAllowCancelling() {
+        return EnumSet.of(OrderStatus.PENDING, OrderStatus.CONFIRMED).stream();
+    }
+
+    private static Stream<OrderStatus> statusesThatCannotBeConfirmed() {
+        return EnumSet.complementOf(EnumSet.of(OrderStatus.PENDING)).stream();
+    }
+
+    private static Stream<OrderStatus> statusesThatCannotBeShipped() {
+        return EnumSet.complementOf(EnumSet.of(OrderStatus.CONFIRMED)).stream();
+    }
+
+    private static Stream<OrderStatus> statusesThatCannotBeDelivered() {
+        return EnumSet.complementOf(EnumSet.of(OrderStatus.SHIPPED)).stream();
+    }
+
+    private static Stream<OrderStatus> statusesThatCannotBeCancelled() {
+        return EnumSet.complementOf(
+                EnumSet.of(OrderStatus.PENDING, OrderStatus.CONFIRMED)
+        ).stream();
     }
 
     @Test
@@ -148,6 +201,122 @@ public class OrderServiceTest {
         OrderDto dto = new OrderDto(List.of(new OrderItemDto(productId, 0)));
 
         assertThrows(DomainValidationException.class, () -> orderService.createOrder(dto));
+
+        verify(orderRepository, never()).save(any(Order.class));
+    }
+
+    @Test
+    void shouldConfirmPendingOrder() {
+        UUID orderId = UUID.randomUUID();
+        Order order = orderAt(OrderStatus.PENDING);
+
+        when(orderRepository.findById(orderId)).thenReturn(Optional.of(order));
+        returnSavedOrder();
+
+        orderService.confirmOrder(orderId);
+
+        assertEquals(OrderStatus.CONFIRMED, order.getStatus());
+        verify(orderRepository).save(order);
+    }
+
+    @Test
+    void shouldShipConfirmedOrder() {
+        UUID orderId = UUID.randomUUID();
+        Order order = orderAt(OrderStatus.CONFIRMED);
+
+        when(orderRepository.findById(orderId)).thenReturn(Optional.of(order));
+        returnSavedOrder();
+
+        orderService.shipOrder(orderId);
+
+        assertEquals(OrderStatus.SHIPPED, order.getStatus());
+        verify(orderRepository).save(order);
+    }
+
+    @Test
+    void shouldDeliverShippedOrder() {
+        UUID orderId = UUID.randomUUID();
+        Order order = orderAt(OrderStatus.SHIPPED);
+
+        when(orderRepository.findById(orderId)).thenReturn(Optional.of(order));
+        returnSavedOrder();
+
+        orderService.deliverOrder(orderId);
+
+        assertEquals(OrderStatus.DELIVERED, order.getStatus());
+        verify(orderRepository).save(order);
+    }
+
+    @ParameterizedTest
+    @MethodSource("statusesThatAllowCancelling")
+    void shouldCancelOrder(OrderStatus status) {
+        UUID orderId = UUID.randomUUID();
+        Order order = orderAt(status);
+
+        when(orderRepository.findById(orderId)).thenReturn(Optional.of(order));
+        returnSavedOrder();
+
+        orderService.cancelOrder(orderId);
+
+        assertEquals(OrderStatus.CANCELLED, order.getStatus());
+        verify(orderRepository).save(order);
+    }
+
+    @ParameterizedTest
+    @MethodSource("statusesThatCannotBeConfirmed")
+    void shouldRejectConfirmWhenOrderIsNotPending(OrderStatus status) {
+        UUID orderId = UUID.randomUUID();
+
+        when(orderRepository.findById(orderId)).thenReturn(Optional.of(orderAt(status)));
+
+        assertThrows(InvalidStatusTransitionException.class, () -> orderService.confirmOrder(orderId));
+
+        verify(orderRepository, never()).save(any(Order.class));
+    }
+
+    @ParameterizedTest
+    @MethodSource("statusesThatCannotBeShipped")
+    void shouldRejectShipWhenOrderIsNotConfirmed(OrderStatus status) {
+        UUID orderId = UUID.randomUUID();
+
+        when(orderRepository.findById(orderId)).thenReturn(Optional.of(orderAt(status)));
+
+        assertThrows(InvalidStatusTransitionException.class, () -> orderService.shipOrder(orderId));
+
+        verify(orderRepository, never()).save(any(Order.class));
+    }
+
+    @ParameterizedTest
+    @MethodSource("statusesThatCannotBeDelivered")
+    void shouldRejectDeliverWhenOrderIsNotShipped(OrderStatus status) {
+        UUID orderId = UUID.randomUUID();
+
+        when(orderRepository.findById(orderId)).thenReturn(Optional.of(orderAt(status)));
+
+        assertThrows(InvalidStatusTransitionException.class, () -> orderService.deliverOrder(orderId));
+
+        verify(orderRepository, never()).save(any(Order.class));
+    }
+
+    @ParameterizedTest
+    @MethodSource("statusesThatCannotBeCancelled")
+    void shouldRejectCancelWhenOrderIsAlreadyFinished(OrderStatus status) {
+        UUID orderId = UUID.randomUUID();
+
+        when(orderRepository.findById(orderId)).thenReturn(Optional.of(orderAt(status)));
+
+        assertThrows(InvalidStatusTransitionException.class, () -> orderService.cancelOrder(orderId));
+
+        verify(orderRepository, never()).save(any(Order.class));
+    }
+
+    @Test
+    void shouldThrowNotFoundWhenConfirmingUnknownOrder() {
+        UUID orderId = UUID.randomUUID();
+
+        when(orderRepository.findById(orderId)).thenReturn(Optional.empty());
+
+        assertThrows(NotFoundException.class, () -> orderService.confirmOrder(orderId));
 
         verify(orderRepository, never()).save(any(Order.class));
     }

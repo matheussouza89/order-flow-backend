@@ -1,6 +1,7 @@
 package com.matheus.orderFlow.order;
 
 import com.matheus.orderFlow.shared.exception.DomainValidationException;
+import com.matheus.orderFlow.shared.exception.InvalidStatusTransitionException;
 import com.matheus.orderFlow.shared.exception.NotFoundException;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -28,7 +29,7 @@ public class OrderControllerTest {
     @MockitoBean
     private OrderService orderService;
 
-    private OrderResponse orderWith(UUID productId) {
+    private OrderResponse orderWith(UUID productId, OrderStatus status) {
         OrderItemResponse item = new OrderItemResponse(
                 UUID.randomUUID(),
                 productId,
@@ -40,7 +41,7 @@ public class OrderControllerTest {
 
         return new OrderResponse(
                 UUID.randomUUID(),
-                OrderStatus.PENDING,
+                status,
                 new BigDecimal("200.00"),
                 List.of(item),
                 Instant.now(),
@@ -63,7 +64,7 @@ public class OrderControllerTest {
         UUID productId = UUID.randomUUID();
 
         when(orderService.createOrder(any(OrderDto.class)))
-                .thenReturn(orderWith(productId));
+                .thenReturn(orderWith(productId, OrderStatus.PENDING));
 
         mockMvc.perform(post("/orders")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -88,7 +89,7 @@ public class OrderControllerTest {
         UUID orderId = UUID.randomUUID();
         UUID productId = UUID.randomUUID();
 
-        when(orderService.getOrder(orderId)).thenReturn(orderWith(productId));
+        when(orderService.getOrder(orderId)).thenReturn(orderWith(productId, OrderStatus.PENDING));
 
         mockMvc.perform(get("/orders/{id}", orderId))
                 .andExpect(status().isOk())
@@ -111,7 +112,7 @@ public class OrderControllerTest {
     @Test
     void shouldGetAllOrders() throws Exception {
         when(orderService.getAllOrders())
-                .thenReturn(List.of(orderWith(UUID.randomUUID())));
+                .thenReturn(List.of(orderWith(UUID.randomUUID(), OrderStatus.PENDING)));
 
         mockMvc.perform(get("/orders"))
                 .andExpect(status().isOk())
@@ -174,5 +175,80 @@ public class OrderControllerTest {
                 .andExpect(status().isBadRequest());
 
         verify(orderService, never()).createOrder(any(OrderDto.class));
+    }
+
+    @Test
+    void shouldConfirmOrder() throws Exception {
+        UUID orderId = UUID.randomUUID();
+        UUID productId = UUID.randomUUID();
+
+        when(orderService.confirmOrder(orderId))
+                .thenReturn(orderWith(productId, OrderStatus.CONFIRMED));
+
+        mockMvc.perform(post("/orders/{id}/confirm", orderId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CONFIRMED"));
+
+        verify(orderService).confirmOrder(orderId);
+    }
+
+    @Test
+    void shouldShipOrder() throws Exception {
+        UUID orderId = UUID.randomUUID();
+        UUID productId = UUID.randomUUID();
+
+        when(orderService.shipOrder(orderId))
+                .thenReturn(orderWith(productId, OrderStatus.SHIPPED));
+
+        mockMvc.perform(post("/orders/{id}/ship", orderId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("SHIPPED"));
+
+        verify(orderService).shipOrder(orderId);
+    }
+
+    @Test
+    void shouldDeliverOrder() throws Exception {
+        UUID orderId = UUID.randomUUID();
+        UUID productId = UUID.randomUUID();
+
+        when(orderService.deliverOrder(orderId))
+                .thenReturn(orderWith(productId, OrderStatus.DELIVERED));
+
+        mockMvc.perform(post("/orders/{id}/deliver", orderId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("DELIVERED"));
+
+        verify(orderService).deliverOrder(orderId);
+    }
+
+    @Test
+    void shouldCancelOrder() throws Exception {
+        UUID orderId = UUID.randomUUID();
+        UUID productId = UUID.randomUUID();
+
+        when(orderService.cancelOrder(orderId))
+                .thenReturn(orderWith(productId, OrderStatus.CANCELLED));
+
+        mockMvc.perform(post("/orders/{id}/cancel", orderId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CANCELLED"));
+
+        verify(orderService).cancelOrder(orderId);
+    }
+
+    @Test
+    void shouldThrowWhenOrderStatusIsInvalid() throws Exception {
+        UUID orderId = UUID.randomUUID();
+
+        when(orderService.shipOrder(orderId)).thenThrow(new InvalidStatusTransitionException(
+                "Only confirmed orders can be shipped"));
+
+        mockMvc.perform(post("/orders/{id}/ship", orderId))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message")
+                        .value("Only confirmed orders can be shipped"));
+
+        verify(orderService).shipOrder(orderId);
     }
 }
