@@ -1,0 +1,515 @@
+openapi: 3.1.0
+info:
+  title: OrderFlow API
+  description: |
+    ## Purpose
+    REST API for managing a product catalog and customer orders, covering
+    order creation from the catalog and the order lifecycle up to delivery.
+
+    ## Context
+    An order is a historical document, not a live view of the catalog. When
+    an order is created, the name and price of each product are copied into
+    the order item and never change again: updating a product does not
+    rewrite past sales. As a consequence, the item stores the product
+    identifier without a foreign key, and an order remains readable even if
+    the product is removed from the catalog.
+
+    The client sends only the product and the quantity. Unit price,
+    subtotal, total and status are derived by the domain — there is no way
+    to submit an order whose total disagrees with its items, or one that is
+    already delivered.
+
+    ## Order lifecycle
+    An order starts as PENDING and moves forward through business actions:
+
+    - `confirm` — from PENDING
+    - `ship` — from CONFIRMED
+    - `deliver` — from SHIPPED
+    - `cancel` — from PENDING or CONFIRMED
+
+    No operation accepts a target status: the client requests an action and
+    the domain decides the outcome. A transition outside these rules returns
+    **409 Conflict** — the request is well formed and the order is valid;
+    what prevents the operation is the current state of the resource.
+
+    ## Known flows
+    1. The client lists the catalog with `GET /products` and creates an
+       order with `POST /orders`, sending product identifiers and
+       quantities. The response carries the order with prices already
+       frozen.
+    2. Once payment is confirmed, the application calls
+       `POST /orders/{id}/confirm` and, as shipping progresses, `ship` and
+       `deliver`.
+    3. Before shipping, an order can be cancelled with
+       `POST /orders/{id}/cancel`. After shipping the operation is refused:
+       that case becomes a return, which is out of scope for this version.
+
+    ## Errors
+    Every error response shares the same body (`ErrorResponse`), with
+    `status`, `message` and `errors`. The `errors` map is filled only when
+    there is a request field to blame — a 409 or a 500 has no offending
+    field and comes with an empty map.
+  contact:
+    name: Matheus Souza
+  version: 1.0.0
+servers:
+- url: http://localhost:8081
+  description: Generated server url
+tags:
+- name: Products
+  description: Product management endpoints
+- name: Orders
+  description: Order management endpoints
+paths:
+  /products/{id}:
+    get:
+      tags:
+      - Products
+      summary: Get product by ID
+      description: Returns a product based on its ID.
+      operationId: getProduct
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: Successfully retrieved product
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ProductResponse"
+        "404":
+          description: Product not found
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      tags:
+      - Products
+      summary: Update product
+      description: Updates an existing product in the system.
+      operationId: updateProduct
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProductDto"
+        required: true
+      responses:
+        "200":
+          description: Product updated successfully
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ProductResponse"
+        "400":
+          description: Invalid product data
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Product not found
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      tags:
+      - Products
+      summary: Delete product
+      description: Deletes a product from the system.
+      operationId: deleteProduct
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "204":
+          description: Product deleted successfully
+        "404":
+          description: Product not found
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /products:
+    get:
+      tags:
+      - Products
+      summary: Get all products
+      description: Returns a list of all products in the system.
+      operationId: getProducts
+      responses:
+        "200":
+          description: Successfully retrieved list of products
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ProductResponse"
+    post:
+      tags:
+      - Products
+      summary: Create product
+      description: Creates a new product in the system.
+      operationId: createProduct
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProductDto"
+        required: true
+      responses:
+        "201":
+          description: Product created successfully
+          headers:
+            Location:
+              description: URI of the created product
+              style: simple
+              schema:
+                type: string
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ProductResponse"
+        "400":
+          description: Invalid product data
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /orders:
+    get:
+      tags:
+      - Orders
+      summary: Get all orders
+      description: Returns a list of all orders in the system.
+      operationId: getAllOrders
+      responses:
+        "200":
+          description: Successfully retrieved list of orders
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/OrderResponse"
+    post:
+      tags:
+      - Orders
+      summary: Create order
+      description: |-
+        Creates an order from catalog products. The client sends only product
+        identifiers and quantities; name, unit price, subtotal and total are
+        taken from the catalog and frozen. The order starts as PENDING.
+      operationId: createOrder
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OrderDto"
+        required: true
+      responses:
+        "201":
+          description: Order created successfully
+          headers:
+            Location:
+              description: URI of the created order
+              style: simple
+              schema:
+                type: string
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/OrderResponse"
+        "400":
+          description: "Order has no items, or an item has an invalid quantity"
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: One of the products does not exist
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /orders/{id}/ship:
+    post:
+      tags:
+      - Orders
+      summary: Ship order
+      description: Moves the order from CONFIRMED to SHIPPED.
+      operationId: shipOrder
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: Order shipped
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/OrderResponse"
+        "404":
+          description: Order not found
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Order is not CONFIRMED
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /orders/{id}/deliver:
+    post:
+      tags:
+      - Orders
+      summary: Deliver order
+      description: Moves the order from SHIPPED to DELIVERED.
+      operationId: deliverOrder
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: Order delivered
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/OrderResponse"
+        "404":
+          description: Order not found
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Order is not SHIPPED
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /orders/{id}/confirm:
+    post:
+      tags:
+      - Orders
+      summary: Confirm order
+      description: Moves the order from PENDING to CONFIRMED.
+      operationId: confirmOrder
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: Order confirmed
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/OrderResponse"
+        "404":
+          description: Order not found
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Order is not PENDING
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /orders/{id}/cancel:
+    post:
+      tags:
+      - Orders
+      summary: Cancel order
+      description: Cancels an order that has not shipped yet. Allowed from PENDING
+        or CONFIRMED.
+      operationId: cancelOrder
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: Order cancelled
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/OrderResponse"
+        "404":
+          description: Order not found
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Order has already shipped or finished
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /orders/{id}:
+    get:
+      tags:
+      - Orders
+      summary: Get order by ID
+      description: "Returns an order with its items, each carrying the product name\
+        \ and price frozen at purchase time."
+      operationId: getOrderById
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: Successfully retrieved order
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/OrderResponse"
+        "404":
+          description: Order not found
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+components:
+  schemas:
+    ProductDto:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        price:
+          type: number
+    ErrorResponse:
+      type: object
+      properties:
+        status:
+          type: integer
+          format: int32
+        message:
+          type: string
+        errors:
+          type: object
+          additionalProperties:
+            type: string
+    ProductResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+        price:
+          type: number
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    OrderDto:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/OrderItemDto"
+    OrderItemDto:
+      type: object
+      properties:
+        productId:
+          type: string
+          format: uuid
+        quantity:
+          type: integer
+          format: int32
+    OrderItemResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        productId:
+          type: string
+          format: uuid
+        productName:
+          type: string
+        unitPrice:
+          type: number
+        quantity:
+          type: integer
+          format: int32
+        subtotal:
+          type: number
+    OrderResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum:
+          - PENDING
+          - CONFIRMED
+          - SHIPPED
+          - DELIVERED
+          - CANCELLED
+        total:
+          type: number
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/OrderItemResponse"
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
