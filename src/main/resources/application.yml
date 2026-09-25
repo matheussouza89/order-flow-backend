@@ -3,9 +3,9 @@ spring:
     name: orderflow
 
   datasource:
-    url: jdbc:mysql://localhost:3308/orderflow
-    username: orderflow
-    password: orderflow
+    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3308/orderflow}
+    username: ${SPRING_DATASOURCE_USERNAME:orderflow}
+    password: ${SPRING_DATASOURCE_PASSWORD:orderflow}
 
   jpa:
     hibernate:
@@ -17,11 +17,11 @@ spring:
 
   data:
     redis:
-      host: localhost
-      port: 6379
+      host: ${SPRING_DATA_REDIS_HOST:localhost}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
 
   rabbitmq:
-    host: localhost
-    port: 5672
-    username: orderflow
-    password: orderflow
+    host: ${SPRING_RABBITMQ_HOST:localhost}
+    port: ${SPRING_RABBITMQ_PORT:5672}
+    username: ${SPRING_RABBITMQ_USERNAME:orderflow}
+    password: ${SPRING_RABBITMQ_PASSWORD:orderflow}

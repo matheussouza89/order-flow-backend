@@ -1,5 +1,27 @@
 
 services:
+  app:
+    build: .
+    container_name: orderflow-app
+    restart: unless-stopped
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/orderflow
+      SPRING_DATASOURCE_USERNAME: orderflow
+      SPRING_DATASOURCE_PASSWORD: orderflow
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_RABBITMQ_HOST: rabbitmq
+    ports:
+      - "8080:8080"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      rabbitmq:
+        condition: service_started
+    networks:
+      - orderflow-network
+
   mysql:
     image: mysql:8.4
     container_name: orderflow-mysql
@@ -13,6 +35,11 @@ services:
       - "3308:3306"
     volumes:
       - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-porderflow", "-uorderflow"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
     networks:
       - orderflow-network
 

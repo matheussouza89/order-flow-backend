@@ -28,15 +28,25 @@ carrinho são os próximos passos (ver [Roadmap](#roadmap)).
 
 ## Como rodar
 
-**Pré-requisitos:** Java 21 e Docker.
+**Pré-requisito:** Docker.
 
-Suba a infraestrutura:
+Suba o projeto inteiro — API, MySQL, Redis e RabbitMQ:
 
 ```bash
-docker compose up -d
+docker compose up --build
 ```
 
-Rode a aplicação:
+A imagem da aplicação é construída pelo Dockerfile em dois estágios: o
+primeiro compila com Maven, o segundo leva apenas o jar para uma imagem com
+JRE. As conexões vêm de variáveis de ambiente, com o ambiente local como
+padrão — por isso a mesma imagem serve para qualquer ambiente.
+
+Para desenvolver com a aplicação fora do container (Java 21 necessário), suba
+só a infraestrutura e rode pelo Maven:
+
+```bash
+docker compose up -d mysql redis rabbitmq
+```
 
 ```bash
 ./mvnw spring-boot:run
@@ -284,6 +294,7 @@ Nome, preço e total vêm do catálogo e do domínio — nunca do cliente.
 - [x] Organização por funcionalidade com entidade e repositório encapsulados
 - [x] 100 testes, separados por velocidade (unitários e integração)
 - [x] Pipeline de CI rodando `mvn verify` a cada push
+- [x] Imagem da aplicação e stack completa em Docker, com conexões por variável de ambiente
 - [x] Documentação OpenAPI
 
 **Próximos passos**
@@ -292,5 +303,4 @@ Nome, preço e total vêm do catálogo e do domínio — nunca do cliente.
 - [ ] Consumer processando o evento de forma assíncrona
 - [ ] Carrinho no Redis, com checkout gerando o pedido
 - [ ] Paginação nas listagens
-- [ ] Credenciais por variável de ambiente e profiles por ambiente
 - [ ] Autenticação com Spring Security + JWT

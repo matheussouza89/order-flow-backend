@@ -1,0 +1,8 @@
+target/
+.git/
+.idea/
+.github/
+*.md
+openapi.yaml
+docker-compose.yml
+Dockerfile
