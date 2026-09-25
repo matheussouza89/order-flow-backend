@@ -17,16 +17,18 @@ import java.util.stream.Collectors;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
     @ExceptionHandler(NotFoundException.class)
-    public ResponseEntity<Void> handleNotFoundException(
+    public ResponseEntity<ErrorResponse> handleNotFoundException(
             NotFoundException exception) {
 
         log.debug("Resource not found: {}", exception.getMessage());
 
-        return ResponseEntity.notFound().build();
+        ErrorResponse response = new ErrorResponse(404, exception.getMessage());
+
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<Map<String, Object>> handleValidationException(
+    public ResponseEntity<ErrorResponse> handleValidationException(
             MethodArgumentNotValidException exception) {
 
         Map<String, String> errors = new LinkedHashMap<>();
@@ -45,27 +47,22 @@ public class GlobalExceptionHandler {
                 .map(entry -> entry.getKey() + ": " + entry.getValue())
                 .collect(Collectors.joining("; "));
 
-        Map<String, Object> response = new LinkedHashMap<>();
-        response.put("status", 400);
-        response.put("message", message);
-        response.put("errors", errors);
+        ErrorResponse response = new ErrorResponse(400, message, errors);
 
         return ResponseEntity.badRequest().body(response);
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
-    public ResponseEntity<Map<String, Object>> handleInvalidJson(
+    public ResponseEntity<ErrorResponse> handleInvalidJson(
             HttpMessageNotReadableException exception) {
 
-        Map<String, Object> response = new LinkedHashMap<>();
-        response.put("status", 400);
-        response.put("message", "Invalid request body");
+        ErrorResponse response = new ErrorResponse(400, "Invalid request body");
 
         return ResponseEntity.badRequest().body(response);
     }
 
     @ExceptionHandler(DomainValidationException.class)
-    public ResponseEntity<Map<String, Object>> handleDomainValidation(
+    public ResponseEntity<ErrorResponse> handleDomainValidation(
             DomainValidationException exception
     ) {
 
@@ -75,49 +72,43 @@ public class GlobalExceptionHandler {
         Map<String, String> errors = new LinkedHashMap<>();
         errors.put(exception.getField(), exception.getMessage());
 
-        Map<String, Object> response = new LinkedHashMap<>();
-        response.put("status", 400);
-        response.put("message", exception.getField() + ": " + exception.getMessage());
-        response.put("errors", errors);
+        ErrorResponse response = new ErrorResponse(
+                400,
+                exception.getField() + ": " + exception.getMessage(),
+                errors
+        );
 
         return ResponseEntity.badRequest().body(response);
     }
 
     @ExceptionHandler(HttpClientErrorException.Unauthorized.class)
-    public ResponseEntity<Map<String, Object>> handleUnauthorizedException(
+    public ResponseEntity<ErrorResponse> handleUnauthorizedException(
             HttpClientErrorException.Unauthorized exception
     ) {
-        Map<String, Object> response = new LinkedHashMap<>();
-
-        response.put("status", 401);
-        response.put("message", exception.getMessage());
+        ErrorResponse response = new ErrorResponse(401, exception.getMessage());
 
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
     }
 
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<Map<String, Object>> handleGenericException(
+    public ResponseEntity<ErrorResponse> handleGenericException(
             Exception exception) {
 
         log.error("Unhandled exception", exception);
 
-        Map<String, Object> response = new LinkedHashMap<>();
-        response.put("status", 500);
-        response.put("message", "An unexpected error occurred");
+        ErrorResponse response = new ErrorResponse(500, "Internal Server Error");
 
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(response);
     }
 
     @ExceptionHandler(InvalidStatusTransitionException.class)
-    public ResponseEntity<Map<String, Object>> handleInvalidStatusTransition(
+    public ResponseEntity<ErrorResponse> handleInvalidStatusTransition(
             InvalidStatusTransitionException exception
     ) {
         log.warn("Invalid status transition: {}", exception.getMessage());
 
-        Map<String, Object> response = new LinkedHashMap<>();
-        response.put("status", 409);
-        response.put("message", exception.getMessage());
+        ErrorResponse response = new ErrorResponse(409, exception.getMessage());
 
         return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
     }
