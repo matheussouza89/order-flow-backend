@@ -12,6 +12,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -33,6 +34,9 @@ public class OrderServiceTest {
 
     @Mock
     private ProductService productService;
+
+    @Mock
+    private ApplicationEventPublisher events;
 
     @InjectMocks
     private OrderService orderService;
@@ -216,6 +220,7 @@ public class OrderServiceTest {
         orderService.confirmOrder(orderId);
 
         assertEquals(OrderStatus.CONFIRMED, order.getStatus());
+        verify(events).publishEvent(any(OrderConfirmedEvent.class));
         verify(orderRepository).save(order);
     }
 

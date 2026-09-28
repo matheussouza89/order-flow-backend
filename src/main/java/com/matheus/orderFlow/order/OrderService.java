@@ -4,6 +4,7 @@ import com.matheus.orderFlow.product.ProductService;
 import com.matheus.orderFlow.shared.exception.NotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -16,6 +17,7 @@ import java.util.UUID;
 public class OrderService {
     private final OrderRepository orderRepository;
     private final ProductService productService;
+    private final ApplicationEventPublisher events;
 
     @Transactional(readOnly = true)
     public OrderResponse getOrder(UUID orderId) {
@@ -59,6 +61,14 @@ public class OrderService {
 
         order.confirm();
         orderRepository.save(order);
+
+        events.publishEvent(
+                new OrderConfirmedEvent(
+                        order.getId(),
+                        order.getTotal(),
+                        order.getUpdatedAt()
+                )
+        );
 
         log.info("Order transitioned: id={} from={} to={}",
                 orderId, previousStatus, order.getStatus());
