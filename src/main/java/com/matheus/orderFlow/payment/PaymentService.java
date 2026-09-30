@@ -7,6 +7,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.util.Optional;
 import java.util.UUID;
 
 @Slf4j
@@ -16,18 +17,20 @@ public class PaymentService {
     private final PaymentRepository paymentRepository;
 
     @Transactional
-    public void chargeOrder(UUID orderId, BigDecimal amount) {
+    Optional<PendingCharge> registerPending(UUID orderId, BigDecimal amount) {
         String idempotencyKey = idempotencyKeyFor(orderId);
 
         if (paymentRepository.existsByIdempotencyKey(idempotencyKey)) {
             log.info("Payment already registered for order: orderId={}", orderId);
-            return;
+            return Optional.empty();
         }
 
         Payment payment = paymentRepository.save(new Payment(orderId, amount, idempotencyKey));
 
         log.info("Payment created: id={} orderId={} amount={}",
                 payment.getId(), orderId, amount);
+
+        return Optional.of(new PendingCharge(payment.getId(), idempotencyKey, amount));
     }
 
     @Transactional(readOnly = true)

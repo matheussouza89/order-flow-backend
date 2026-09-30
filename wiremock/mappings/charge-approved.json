@@ -1,0 +1,17 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPath": "/charges"
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "id": "ch_{{randomValue type='ALPHANUMERIC' length=12}}",
+      "status": "approved"
+    },
+    "transformers": ["response-template"]
+  }
+}

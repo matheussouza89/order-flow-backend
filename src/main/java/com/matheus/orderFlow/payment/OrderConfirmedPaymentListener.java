@@ -8,10 +8,10 @@ import org.springframework.stereotype.Component;
 @Component
 @RequiredArgsConstructor
 class OrderConfirmedPaymentListener {
-    private final PaymentService paymentService;
+    private final PaymentProcessor paymentProcessor;
 
     @RabbitListener(queues = PaymentMessagingConfig.ORDER_CONFIRMED_QUEUE)
     void onOrderConfirmed(OrderConfirmedEvent event) {
-        paymentService.chargeOrder(event.orderId(), event.total());
+        paymentProcessor.process(event.orderId(), event.total());
     }
 }
