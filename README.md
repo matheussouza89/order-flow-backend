@@ -5,9 +5,10 @@
 API REST para gestão de pedidos, construída em Spring Boot 4 e Java 21.
 
 O projeto é um estudo de arquitetura em evolução: cada decisão de desenho está
-documentada abaixo, com o motivo por trás dela. Os domínios de **produtos** e
-**pedidos** estão completos, incluindo o ciclo de vida do pedido; mensageria e
-carrinho são os próximos passos (ver [Roadmap](#roadmap)).
+documentada abaixo, com o motivo por trás dela. Os domínios de **produtos**, **pedidos** e **pagamentos** estão completos,
+incluindo o ciclo de vida do pedido e a cobrança assíncrona com política de
+resiliência; carrinho e autenticação são os próximos passos
+(ver [Roadmap](#roadmap)).
 
 ---
 
@@ -18,10 +19,11 @@ carrinho são os próximos passos (ver [Roadmap](#roadmap)).
 | Linguagem | Java 21 |
 | Framework | Spring Boot 4.1.1 (Web MVC, Data JPA, Validation) |
 | Banco | MySQL 8.4 + Flyway |
-| Mensageria | RabbitMQ *(provisionado, em uso a partir dos eventos de pedido)* |
+| Mensageria | RabbitMQ |
 | Cache | Redis *(provisionado, em uso a partir do carrinho)* |
 | Documentação | springdoc-openapi (Swagger UI) |
-| Testes | JUnit 5, Mockito, Testcontainers |
+| Resiliência | Resilience4j |
+| Testes | JUnit 5, Mockito, Testcontainers, WireMock, Awaitility |
 | Build | Maven |
 
 ---
@@ -69,14 +71,15 @@ alteração:
 ./mvnw test
 ```
 
-Roda os **82 testes unitários** em poucos segundos, sem Docker.
+Roda os **101 testes unitários** em poucos segundos, sem Docker.
 
 ```bash
 ./mvnw verify
 ```
 
-Roda os unitários **mais os 18 de integração**, que sobem MySQL, Redis e
-RabbitMQ reais via Testcontainers.
+Roda os unitários **mais os 23 de integração**, que sobem MySQL, Redis e
+RabbitMQ reais via Testcontainers, e um WireMock fazendo as vezes do gateway de
+pagamento.
 
 A separação é feita por convenção de nome: o Surefire pega `*Test.java`, o
 Failsafe pega `*IT.java`.
@@ -231,6 +234,63 @@ correta e o pedido é válido; o que impede a operação é o estado atual do
 recurso. Por isso o corpo desse erro não traz `errors` — não há campo enviado
 pelo cliente a que apontar.
 
+### Cobrança assíncrona, fora da requisição do usuário
+
+Confirmar um pedido publica um evento; o pagamento é criado ao consumi-lo. Duas
+consequências: a confirmação responde de imediato, sem esperar o gateway, e o
+gateway fora do ar não impede o pedido de ser confirmado.
+
+O evento é publicado com `@TransactionalEventListener` em `AFTER_COMMIT`.
+Mensagem não tem rollback: publicar dentro da transação faria o consumidor
+reagir a uma confirmação que um erro posterior desfez.
+
+O RabbitMQ entrega **pelo menos uma vez**, então mensagem repetida é
+comportamento normal, não anomalia. A chave de idempotência é derivada do
+pedido, de modo que a mesma mensagem produz a mesma chave: a verificação evita
+o trabalho e a constraint única protege contra entregas simultâneas.
+
+Cada consumidor declara a própria fila. A configuração compartilhada tem apenas
+a exchange e o conversor, então acrescentar um consumidor não mexe no que já
+existe — e quem publica continua sem saber quem escuta.
+
+### Chamada ao gateway fora da transação
+
+Segurar uma conexão do banco enquanto se espera um terceiro esgota o pool sob
+carga. Por isso a cobrança acontece em três etapas:
+
+```
+[transação]  grava o pagamento como PENDING
+[sem transação]  chama o gateway
+[transação]  grava APPROVED, DECLINED ou FAILED
+```
+
+O pagamento fica visível como `PENDING` no intervalo — se a aplicação morrer no
+meio, existe registro de que a cobrança foi iniciada.
+
+A orquestração vive numa classe separada das transações porque `@Transactional`
+funciona por proxy: um método transacional chamado de dentro da própria classe
+não abre transação alguma, sem erro nem aviso.
+
+### Resiliência na integração com o gateway
+
+| Padrão | Papel |
+|---|---|
+| **Timeout** | desiste de esperar, em vez de prender a thread |
+| **Retry** | 3 tentativas com backoff exponencial, só para falhas transitórias |
+| **Circuit breaker** | para de tentar quando o gateway está comprovadamente fora |
+| **Idempotência** | a chave vai no cabeçalho, para que retentativa não vire segunda cobrança |
+
+O retry só cobre exceções passageiras — timeout e 5xx. Uma requisição malformada
+falharia igual nas três tentativas, e retentar seria desperdício.
+
+Recusa e falha são estados distintos, porque pedem reações distintas: `DECLINED`
+é resposta do gateway e não adianta repetir; `FAILED` é falha técnica e pode ser
+reprocessado.
+
+Os testes sobem um WireMock em porta aleatória e exercitam cada caminho,
+incluindo o mais difícil de demonstrar — com o circuito aberto, a asserção é que
+**nenhuma requisição chegou ao gateway**.
+
 ### Testes de integração com infraestrutura real
 
 Os testes unitários cobrem regras e casos de borda com tudo mockado. Os de
@@ -269,6 +329,16 @@ desenvolvimento local.
 | `POST` | `/orders/{id}/deliver` | 200 / 404 / 409 | Marca como entregue |
 | `POST` | `/orders/{id}/cancel` | 200 / 404 / 409 | Cancela o pedido |
 
+**Pagamentos**
+
+| Método | Rota | Status | Descrição |
+|---|---|---|---|
+| `GET` | `/payments/{id}` | 200 / 404 | Busca por id |
+| `GET` | `/payments/orders/{orderId}` | 200 / 404 | Busca o pagamento de um pedido |
+
+Não há rota para criar, aprovar ou recusar um pagamento: o valor vem do pedido e
+o resultado vem do gateway.
+
 O corpo do `POST /orders` envia apenas o que o cliente pode decidir:
 
 ```json
@@ -292,15 +362,15 @@ Nome, preço e total vêm do catálogo e do domínio — nunca do cliente.
 - [x] Ciclo de vida do pedido com transições validadas no domínio
 - [x] Tratamento global de erros com formato único e logging por severidade
 - [x] Organização por funcionalidade com entidade e repositório encapsulados
-- [x] 100 testes, separados por velocidade (unitários e integração)
+- [x] Cobrança assíncrona por evento, com consumidor idempotente
+- [x] Integração com gateway usando timeout, retry, circuit breaker e idempotência
+- [x] 124 testes, separados por velocidade (unitários e integração)
 - [x] Pipeline de CI rodando `mvn verify` a cada push
 - [x] Imagem da aplicação e stack completa em Docker, com conexões por variável de ambiente
 - [x] Documentação OpenAPI
 
 **Próximos passos**
 
-- [ ] Publicação de evento no RabbitMQ a cada pedido criado
-- [ ] Consumer processando o evento de forma assíncrona
 - [ ] Carrinho no Redis, com checkout gerando o pedido
 - [ ] Paginação nas listagens
 - [ ] Autenticação com Spring Security + JWT
