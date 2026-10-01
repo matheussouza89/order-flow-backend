@@ -5,9 +5,10 @@
 API REST para gestão de pedidos, construída em Spring Boot 4 e Java 21.
 
 O projeto é um estudo de arquitetura em evolução: cada decisão de desenho está
-documentada abaixo, com o motivo por trás dela. Os domínios de **produtos**, **pedidos** e **pagamentos** estão completos,
+documentada abaixo, com o motivo por trás dela. O fluxo de compra está completo
+de ponta a ponta — **catálogo**, **carrinho**, **pedido** e **pagamento** —,
 incluindo o ciclo de vida do pedido e a cobrança assíncrona com política de
-resiliência; carrinho e autenticação são os próximos passos
+resiliência; autenticação e paginação são os próximos passos
 (ver [Roadmap](#roadmap)).
 
 ---
@@ -20,7 +21,7 @@ resiliência; carrinho e autenticação são os próximos passos
 | Framework | Spring Boot 4.1.1 (Web MVC, Data JPA, Validation) |
 | Banco | MySQL 8.4 + Flyway |
 | Mensageria | RabbitMQ |
-| Cache | Redis *(provisionado, em uso a partir do carrinho)* |
+| Dado efêmero | Redis (carrinho, com TTL) |
 | Documentação | springdoc-openapi (Swagger UI) |
 | Resiliência | Resilience4j |
 | Testes | JUnit 5, Mockito, Testcontainers, WireMock, Awaitility |
@@ -71,13 +72,13 @@ alteração:
 ./mvnw test
 ```
 
-Roda os **101 testes unitários** em poucos segundos, sem Docker.
+Roda os **115 testes unitários** em poucos segundos, sem Docker.
 
 ```bash
 ./mvnw verify
 ```
 
-Roda os unitários **mais os 23 de integração**, que sobem MySQL, Redis e
+Roda os unitários **mais os 34 de integração**, que sobem MySQL, Redis e
 RabbitMQ reais via Testcontainers, e um WireMock fazendo as vezes do gateway de
 pagamento.
 
@@ -93,9 +94,12 @@ Failsafe pega `*IT.java`.
 ```
 com.matheus.orderFlow/
 ├── product/          Product, ProductService, ProductRepository, ProductController, DTOs
+├── cart/             Cart, CartService, CartRepository, CartController, DTOs
 ├── order/            Order, OrderItem, OrderStatus, OrderService, OrderController, DTOs
+├── payment/          Payment, PaymentService, PaymentProcessor, gateway e listener, DTOs
 └── shared/
     ├── config/       configuração da aplicação
+    ├── messaging/    exchange e conversor compartilhados
     └── exception/    exceções e tratamento global
 ```
 
@@ -192,8 +196,47 @@ mesmo que o produto deixe de existir, e a integridade é garantida na aplicaçã
 o `OrderService` consulta o `ProductService`, que lança 404 se o produto não
 existir.
 
-O caso oposto seria um carrinho, que *deve* refletir o preço atual — ali a
-chave estrangeira é a escolha certa.
+O carrinho é o caso oposto, e está logo abaixo.
+
+### Carrinho reflete o catálogo ao vivo; o pedido congela
+
+O carrinho guarda apenas `productId → quantidade`. Nome, preço e total são
+buscados no catálogo a cada leitura:
+
+```
+carrinho   produto + quantidade        → preço de hoje, lido do catálogo
+pedido     produto + quantidade
+           + nome + preço unitário     → cópia, congelada no checkout
+```
+
+É a mesma pergunta respondida de dois jeitos, porque são momentos diferentes.
+Um carrinho aberto há três dias precisa mostrar o preço de hoje — exibir o
+preço antigo e cobrar outro no checkout seria pior do que atualizar. Já o
+pedido é um acordo fechado: o preço que valeu é o do instante da compra.
+
+O checkout é a fronteira entre os dois. Ele cria o pedido a partir do carrinho
+— é ali que o preço deixa de ser consulta e vira cópia — e só então descarta o
+carrinho. A ordem importa: se o pedido falhar, o carrinho continua de pé para o
+cliente tentar de novo.
+
+Como o carrinho só aponta para o catálogo, um produto removido não pode
+invalidá-lo. O item some da resposta e o total é recalculado sem ele, em vez de
+o carrinho inteiro quebrar por causa de uma linha.
+
+### Carrinho no Redis, não no MySQL
+
+Carrinho é rascunho: a maioria é abandonada e nenhum deles precisa sobreviver
+para auditoria. Guardá-lo no banco relacional significaria duas tabelas, duas
+migrations e uma rotina de limpeza para lixo que ninguém vai consultar.
+
+No Redis ele é uma chave com **TTL de 7 dias, renovado a cada alteração** — o
+abandono se resolve sozinho, sem rotina de limpeza. E a estrutura é um mapa
+simples, sem o relacionamento pai-filho que o modelo relacional exigiria.
+
+A diferença prática em relação ao JPA aparece no código: não há *dirty
+checking*, então toda alteração termina com um `save` explícito. E o Redis não
+armazena hash vazio — um carrinho cuja última linha foi removida volta da
+leitura com o mapa nulo, não vazio, o que o domínio trata ao carregar.
 
 ### Agregados com fronteira garantida pelo compilador
 
@@ -317,6 +360,20 @@ desenvolvimento local.
 | `PUT` | `/products/{id}` | 200 / 404 | Atualiza um produto |
 | `DELETE` | `/products/{id}` | 204 / 404 | Remove um produto |
 
+**Carrinho**
+
+| Método | Rota | Status | Descrição |
+|---|---|---|---|
+| `GET` | `/carts/{cartId}` | 200 / 404 | Busca o carrinho com o preço atual |
+| `POST` | `/carts/{cartId}/items` | 200 / 400 / 404 | Soma à quantidade; cria o carrinho no primeiro item |
+| `PUT` | `/carts/{cartId}/items/{productId}` | 200 / 400 / 404 | Substitui a quantidade; zero remove |
+| `DELETE` | `/carts/{cartId}/items/{productId}` | 200 / 404 | Remove o item |
+| `POST` | `/carts/{cartId}/checkout` | 200 / 400 / 404 | Gera o pedido e descarta o carrinho |
+
+Não há rota para criar um carrinho: ele nasce no primeiro item e morre no
+checkout ou no fim do TTL. Um `POST /carts` vazio só criaria chave para ser
+abandonada.
+
 **Pedidos**
 
 | Método | Rota | Status | Descrição |
@@ -364,13 +421,13 @@ Nome, preço e total vêm do catálogo e do domínio — nunca do cliente.
 - [x] Organização por funcionalidade com entidade e repositório encapsulados
 - [x] Cobrança assíncrona por evento, com consumidor idempotente
 - [x] Integração com gateway usando timeout, retry, circuit breaker e idempotência
-- [x] 124 testes, separados por velocidade (unitários e integração)
+- [x] Carrinho no Redis com TTL, preço ao vivo e checkout gerando o pedido
+- [x] 149 testes, separados por velocidade (unitários e integração)
 - [x] Pipeline de CI rodando `mvn verify` a cada push
 - [x] Imagem da aplicação e stack completa em Docker, com conexões por variável de ambiente
 - [x] Documentação OpenAPI
 
 **Próximos passos**
 
-- [ ] Carrinho no Redis, com checkout gerando o pedido
 - [ ] Paginação nas listagens
 - [ ] Autenticação com Spring Security + JWT

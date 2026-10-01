@@ -14,8 +14,8 @@ import org.springframework.context.annotation.Configuration;
                 description = """
                         ## Purpose
                         REST API for managing a product catalog and customer orders, covering
-                        order creation from the catalog, the order lifecycle up to delivery, and
-                        the charge registered for each confirmed order.
+                        the shopping cart, order creation, the order lifecycle up to delivery,
+                        and the charge registered for each confirmed order.
 
                         ## Context
                         An order is a historical document, not a live view of the catalog. When
@@ -29,6 +29,21 @@ import org.springframework.context.annotation.Configuration;
                         subtotal, total and status are derived by the domain — there is no way
                         to submit an order whose total disagrees with its items, or one that is
                         already delivered.
+
+                        ## Cart
+                        The cart is the opposite of the order: it holds only the product and the
+                        quantity, and reads name, price and total from the catalog on every
+                        request. A cart left open for days shows today's price, while an order
+                        keeps the price that applied when it was placed.
+
+                        A cart is created by its first item — there is no endpoint to create an
+                        empty one — and is identified by a caller-supplied id. It expires after
+                        seven days without changes.
+
+                        Checkout is the boundary between the two: it creates the order, freezing
+                        the current prices, and only then discards the cart. If a product is
+                        removed from the catalog, its item disappears from the cart and the total
+                        is recalculated without it, instead of the whole cart failing.
 
                         ## Order lifecycle
                         An order starts as PENDING and moves forward through business actions:
@@ -62,10 +77,11 @@ import org.springframework.context.annotation.Configuration;
                         idempotency key is derived from the order.
 
                         ## Known flows
-                        1. The client lists the catalog with `GET /products` and creates an
-                           order with `POST /orders`, sending product identifiers and
-                           quantities. The response carries the order with prices already
-                           frozen.
+                        1. The client lists the catalog with `GET /products`, fills a cart with
+                           `POST /carts/{cartId}/items` and turns it into an order with
+                           `POST /carts/{cartId}/checkout`. The response carries the order with
+                           prices already frozen. `POST /orders` does the same in one call, for
+                           callers that do not need a cart.
                         2. `POST /orders/{id}/confirm` confirms the order and triggers the
                            charge. The payment can be followed with
                            `GET /payments/orders/{orderId}`. As shipping progresses, the
