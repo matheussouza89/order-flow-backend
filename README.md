@@ -78,7 +78,7 @@ Roda os **115 testes unitários** em poucos segundos, sem Docker.
 ./mvnw verify
 ```
 
-Roda os unitários **mais os 34 de integração**, que sobem MySQL, Redis e
+Roda os unitários **mais os 37 de integração**, que sobem MySQL, Redis e
 RabbitMQ reais via Testcontainers, e um WireMock fazendo as vezes do gateway de
 pagamento.
 
@@ -222,6 +222,13 @@ cliente tentar de novo.
 Como o carrinho só aponta para o catálogo, um produto removido não pode
 invalidá-lo. O item some da resposta e o total é recalculado sem ele, em vez de
 o carrinho inteiro quebrar por causa de uma linha.
+
+No checkout a regra se inverte: o item removido não é ignorado, e a operação é
+recusada com **409**, listando todos os produtos indisponíveis de uma vez.
+Esconder o item na leitura é conveniência; esconder no checkout seria entregar
+ao cliente um pedido diferente do que ele conferiu, e é o único momento do fluxo
+em que o valor vira cobrança. O carrinho continua intacto — quem decide o que
+fazer com o item é o cliente.
 
 ### Carrinho no Redis, não no MySQL
 
@@ -368,7 +375,7 @@ desenvolvimento local.
 | `POST` | `/carts/{cartId}/items` | 200 / 400 / 404 | Soma à quantidade; cria o carrinho no primeiro item |
 | `PUT` | `/carts/{cartId}/items/{productId}` | 200 / 400 / 404 | Substitui a quantidade; zero remove |
 | `DELETE` | `/carts/{cartId}/items/{productId}` | 200 / 404 | Remove o item |
-| `POST` | `/carts/{cartId}/checkout` | 200 / 400 / 404 | Gera o pedido e descarta o carrinho |
+| `POST` | `/carts/{cartId}/checkout` | 200 / 400 / 404 / 409 | Gera o pedido e descarta o carrinho |
 
 Não há rota para criar um carrinho: ele nasce no primeiro item e morre no
 checkout ou no fim do TTL. Um `POST /carts` vazio só criaria chave para ser
@@ -422,7 +429,7 @@ Nome, preço e total vêm do catálogo e do domínio — nunca do cliente.
 - [x] Cobrança assíncrona por evento, com consumidor idempotente
 - [x] Integração com gateway usando timeout, retry, circuit breaker e idempotência
 - [x] Carrinho no Redis com TTL, preço ao vivo e checkout gerando o pedido
-- [x] 149 testes, separados por velocidade (unitários e integração)
+- [x] 152 testes, separados por velocidade (unitários e integração)
 - [x] Pipeline de CI rodando `mvn verify` a cada push
 - [x] Imagem da aplicação e stack completa em Docker, com conexões por variável de ambiente
 - [x] Documentação OpenAPI

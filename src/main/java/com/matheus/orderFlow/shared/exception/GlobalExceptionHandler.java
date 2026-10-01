@@ -112,4 +112,15 @@ public class GlobalExceptionHandler {
 
         return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
     }
+
+    @ExceptionHandler(UnavailableProductException.class)
+    public ResponseEntity<ErrorResponse> handleUnavailableProduct(
+            UnavailableProductException exception
+    ) {
+        log.warn("Checkout blocked by unavailable product: {}", exception.getMessage());
+
+        ErrorResponse response = new ErrorResponse(409, exception.getMessage());
+
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
+    }
 }

@@ -8,6 +8,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.UUID;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -219,6 +220,67 @@ class CartIT extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.items.length()").value(1))
                 .andExpect(jsonPath("$.items[0].productName").value("Teclado"))
                 .andExpect(jsonPath("$.total").value(100.00));
+    }
+
+    @Test
+    void shouldRejectCheckoutWhenAProductIsNoLongerAvailable() throws Exception {
+        String keptId = createProduct("Teclado", "100.00");
+        String removedId = createProduct("Descontinuado", "70.00");
+
+        addItem(keptId, 1);
+        addItem(removedId, 2);
+
+        mockMvc.perform(delete("/products/{id}", removedId))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(post("/carts/{cartId}/checkout", CART_ID))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value(containsString(removedId)))
+                .andExpect(jsonPath("$.errors").isEmpty());
+
+        mockMvc.perform(delete("/carts/{cartId}/items/{productId}", CART_ID, removedId))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post("/carts/{cartId}/checkout", CART_ID))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(1))
+                .andExpect(jsonPath("$.total").value(100.00));
+    }
+
+    @Test
+    void shouldListEveryUnavailableProductAtOnce() throws Exception {
+        String keptId = createProduct("Teclado", "100.00");
+        String firstRemovedId = createProduct("Descontinuado", "70.00");
+        String secondRemovedId = createProduct("Esgotado", "30.00");
+
+        addItem(keptId, 1);
+        addItem(firstRemovedId, 1);
+        addItem(secondRemovedId, 1);
+
+        mockMvc.perform(delete("/products/{id}", firstRemovedId))
+                .andExpect(status().isNoContent());
+        mockMvc.perform(delete("/products/{id}", secondRemovedId))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(post("/carts/{cartId}/checkout", CART_ID))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value(containsString(firstRemovedId)))
+                .andExpect(jsonPath("$.message").value(containsString(secondRemovedId)));
+    }
+
+    @Test
+    void shouldKeepTheCartWhenCheckoutIsRejected() throws Exception {
+        String productId = createProduct("Descontinuado", "70.00");
+        addItem(productId, 2);
+
+        mockMvc.perform(delete("/products/{id}", productId))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(post("/carts/{cartId}/checkout", CART_ID))
+                .andExpect(status().isConflict());
+
+        mockMvc.perform(get("/carts/{cartId}", CART_ID))
+                .andExpect(status().isOk());
     }
 
     @Test

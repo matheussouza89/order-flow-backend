@@ -41,9 +41,14 @@ import org.springframework.context.annotation.Configuration;
                         seven days without changes.
 
                         Checkout is the boundary between the two: it creates the order, freezing
-                        the current prices, and only then discards the cart. If a product is
-                        removed from the catalog, its item disappears from the cart and the total
-                        is recalculated without it, instead of the whole cart failing.
+                        the current prices, and only then discards the cart.
+
+                        If a product is removed from the catalog, its item disappears from the
+                        cart and the total is recalculated without it, instead of the whole cart
+                        failing. Checkout is stricter: it refuses with **409 Conflict**, naming
+                        every unavailable product, rather than placing an order that differs from
+                        what the client reviewed. The cart is left untouched, so removing the
+                        item and trying again is enough.
 
                         ## Order lifecycle
                         An order starts as PENDING and moves forward through business actions:

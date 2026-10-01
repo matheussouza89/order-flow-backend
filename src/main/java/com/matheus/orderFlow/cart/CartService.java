@@ -8,6 +8,7 @@ import com.matheus.orderFlow.product.ProductResponse;
 import com.matheus.orderFlow.product.ProductService;
 import com.matheus.orderFlow.shared.exception.DomainValidationException;
 import com.matheus.orderFlow.shared.exception.NotFoundException;
+import com.matheus.orderFlow.shared.exception.UnavailableProductException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -17,6 +18,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -74,6 +76,8 @@ public class CartService {
             throw new DomainValidationException("items", "Cannot checkout an empty cart");
         }
 
+        rejectUnavailableProducts(cart);
+
         OrderDto orderDto = new OrderDto(
                 cart.getItems().entrySet().stream()
                         .map(entry -> new OrderItemDto(entry.getKey(), entry.getValue()))
@@ -88,6 +92,23 @@ public class CartService {
                 cartId, order.id(), order.total());
 
         return order;
+    }
+
+    private void rejectUnavailableProducts(Cart cart) {
+        List<UUID> unavailable = cart.getItems().keySet().stream()
+                .filter(productId -> findAvailableProduct(productId).isEmpty())
+                .toList();
+
+        if (unavailable.isEmpty()) {
+            return;
+        }
+
+        String ids = unavailable.stream()
+                .map(UUID::toString)
+                .collect(Collectors.joining(", "));
+
+        throw new UnavailableProductException(
+                "Cart contains products that are no longer available: " + ids);
     }
 
     private Cart findOrThrow(String cartId) {

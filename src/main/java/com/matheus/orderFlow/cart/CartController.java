@@ -83,6 +83,9 @@ class CartController {
             @ApiResponse(responseCode = "400", description = "Cart is empty",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "404", description = "Cart not found",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "409",
+                    description = "Cart contains a product that is no longer available",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     @PostMapping("/{cartId}/checkout")
