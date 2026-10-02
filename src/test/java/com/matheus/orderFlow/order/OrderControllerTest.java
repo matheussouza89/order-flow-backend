@@ -3,8 +3,14 @@ package com.matheus.orderFlow.order;
 import com.matheus.orderFlow.shared.exception.DomainValidationException;
 import com.matheus.orderFlow.shared.exception.InvalidStatusTransitionException;
 import com.matheus.orderFlow.shared.exception.NotFoundException;
+import com.matheus.orderFlow.shared.web.PageResponse;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -15,6 +21,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -28,6 +35,11 @@ public class OrderControllerTest {
 
     @MockitoBean
     private OrderService orderService;
+
+    private PageResponse<OrderResponse> page(List<OrderResponse> content,
+                                             int page, int size, long totalElements) {
+        return PageResponse.of(new PageImpl<>(content, PageRequest.of(page, size), totalElements));
+    }
 
     private OrderResponse orderWith(UUID productId, OrderStatus status) {
         OrderItemResponse item = new OrderItemResponse(
@@ -111,26 +123,49 @@ public class OrderControllerTest {
 
     @Test
     void shouldGetAllOrders() throws Exception {
-        when(orderService.getAllOrders())
-                .thenReturn(List.of(orderWith(UUID.randomUUID(), OrderStatus.PENDING)));
+        when(orderService.getAllOrders(any(Pageable.class)))
+                .thenReturn(page(
+                        List.of(orderWith(UUID.randomUUID(), OrderStatus.PENDING)), 0, 20, 1));
 
         mockMvc.perform(get("/orders"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$").isArray())
-                .andExpect(jsonPath("$.length()").value(1))
-                .andExpect(jsonPath("$[0].total").value(200.00));
+                .andExpect(jsonPath("$.content").isArray())
+                .andExpect(jsonPath("$.content.length()").value(1))
+                .andExpect(jsonPath("$.content[0].total").value(200.00))
+                .andExpect(jsonPath("$.page").value(0))
+                .andExpect(jsonPath("$.size").value(20))
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.totalPages").value(1));
 
-        verify(orderService).getAllOrders();
+        verify(orderService).getAllOrders(any(Pageable.class));
     }
 
     @Test
-    void shouldReturnEmptyListWhenThereAreNoOrders() throws Exception {
-        when(orderService.getAllOrders()).thenReturn(List.of());
+    void shouldReturnEmptyPageWhenThereAreNoOrders() throws Exception {
+        when(orderService.getAllOrders(any(Pageable.class)))
+                .thenReturn(page(List.of(), 0, 20, 0));
 
         mockMvc.perform(get("/orders"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$").isArray())
-                .andExpect(jsonPath("$.length()").value(0));
+                .andExpect(jsonPath("$.content").isArray())
+                .andExpect(jsonPath("$.content.length()").value(0))
+                .andExpect(jsonPath("$.totalElements").value(0));
+    }
+
+    @Test
+    void shouldApplyTheDefaultPageableWhenNoParametersAreSent() throws Exception {
+        when(orderService.getAllOrders(any(Pageable.class)))
+                .thenReturn(page(List.of(), 0, 20, 0));
+
+        mockMvc.perform(get("/orders")).andExpect(status().isOk());
+
+        ArgumentCaptor<Pageable> captor = ArgumentCaptor.forClass(Pageable.class);
+        verify(orderService).getAllOrders(captor.capture());
+
+        Pageable pageable = captor.getValue();
+        assertEquals(0, pageable.getPageNumber());
+        assertEquals(20, pageable.getPageSize());
+        assertEquals(Sort.by(Sort.Direction.DESC, "createdAt"), pageable.getSort());
     }
 
     @Test

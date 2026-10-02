@@ -94,13 +94,107 @@ class ProductIT extends AbstractIntegrationTest {
 
         mockMvc.perform(get("/products"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(0));
+                .andExpect(jsonPath("$.content.length()").value(0))
+                .andExpect(jsonPath("$.totalElements").value(0));
     }
 
     @Test
     void shouldReturnNotFoundForUnknownId() throws Exception {
         mockMvc.perform(get("/products/{id}", UUID.randomUUID()))
                 .andExpect(status().isNotFound());
+    }
+
+    private void createProducts(int quantity) throws Exception {
+        for (int index = 0; index < quantity; index++) {
+            mockMvc.perform(post("/products")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("""
+                                    {
+                                        "name": "Produto %02d",
+                                        "description": "Descricao",
+                                        "price": 10.00
+                                    }
+                                    """.formatted(index)))
+                    .andExpect(status().isCreated());
+        }
+    }
+
+    @Test
+    void shouldSplitProductsAcrossPages() throws Exception {
+        createProducts(25);
+
+        mockMvc.perform(get("/products").param("size", "10"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(10))
+                .andExpect(jsonPath("$.page").value(0))
+                .andExpect(jsonPath("$.size").value(10))
+                .andExpect(jsonPath("$.totalElements").value(25))
+                .andExpect(jsonPath("$.totalPages").value(3));
+
+        mockMvc.perform(get("/products").param("size", "10").param("page", "2"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(5))
+                .andExpect(jsonPath("$.page").value(2));
+    }
+
+    @Test
+    void shouldApplyTheDefaultPageSize() throws Exception {
+        createProducts(1);
+
+        mockMvc.perform(get("/products"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.size").value(20));
+    }
+
+    @Test
+    void shouldReturnTheNewestProductsFirstByDefault() throws Exception {
+        createProducts(3);
+
+        mockMvc.perform(get("/products"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].name").value("Produto 02"))
+                .andExpect(jsonPath("$.content[2].name").value("Produto 00"));
+    }
+
+    @Test
+    void shouldReturnAnEmptyPageBeyondTheLastOne() throws Exception {
+        createProducts(3);
+
+        mockMvc.perform(get("/products").param("page", "99"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(0))
+                .andExpect(jsonPath("$.totalElements").value(3));
+    }
+
+    @Test
+    void shouldCapThePageSizeAtTheConfiguredMaximum() throws Exception {
+        createProducts(3);
+
+        mockMvc.perform(get("/products").param("size", "1000"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.size").value(100));
+    }
+
+    @Test
+    void shouldSortByTheRequestedField() throws Exception {
+        createProducts(3);
+
+        mockMvc.perform(get("/products").param("sort", "name,asc"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].name").value("Produto 00"))
+                .andExpect(jsonPath("$.content[2].name").value("Produto 02"));
+
+        mockMvc.perform(get("/products").param("sort", "name,desc"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].name").value("Produto 02"));
+    }
+
+    @Test
+    void shouldRejectSortingByAnUnknownField() throws Exception {
+        createProducts(1);
+
+        mockMvc.perform(get("/products").param("sort", "doesNotExist,asc"))
+                .andExpect(status().isInternalServerError());
     }
 
     @Test

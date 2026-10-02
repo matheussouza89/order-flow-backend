@@ -2,6 +2,12 @@ package com.matheus.orderFlow.product;
 
 import com.matheus.orderFlow.shared.exception.DomainValidationException;
 import com.matheus.orderFlow.shared.exception.NotFoundException;
+import com.matheus.orderFlow.shared.web.PageResponse;
+import org.mockito.ArgumentCaptor;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.http.MediaType;
@@ -17,6 +23,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -37,6 +44,11 @@ public class ProductControllerTest {
                 UUID.randomUUID(), name, description, price,
                 Instant.now(), Instant.now()
         );
+    }
+
+    private PageResponse<ProductResponse> page(List<ProductResponse> content,
+                                               int page, int size, long totalElements) {
+        return PageResponse.of(new PageImpl<>(content, PageRequest.of(page, size), totalElements));
     }
 
     @Test
@@ -77,31 +89,71 @@ public class ProductControllerTest {
                 new BigDecimal("3500.00")
         );
 
-        when(productService.getAllProducts())
-                .thenReturn(List.of(product));
+        when(productService.getAllProducts(any(Pageable.class)))
+                .thenReturn(page(List.of(product), 0, 20, 1));
 
         mockMvc.perform(get("/products"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$").isArray())
-                .andExpect(jsonPath("$.length()").value(1))
-                .andExpect(jsonPath("$[0].name").value("Notebook"))
-                .andExpect(jsonPath("$[0].description")
+                .andExpect(jsonPath("$.content").isArray())
+                .andExpect(jsonPath("$.content.length()").value(1))
+                .andExpect(jsonPath("$.content[0].name").value("Notebook"))
+                .andExpect(jsonPath("$.content[0].description")
                         .value("Notebook para trabalho"))
-                .andExpect(jsonPath("$[0].price").value(3500.00));
+                .andExpect(jsonPath("$.content[0].price").value(3500.00))
+                .andExpect(jsonPath("$.page").value(0))
+                .andExpect(jsonPath("$.size").value(20))
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.totalPages").value(1));
 
-        verify(productService).getAllProducts();
+        verify(productService).getAllProducts(any(Pageable.class));
     }
 
     @Test
-    void shouldReturnEmptyListWhenThereAreNoProducts() throws Exception {
-        when(productService.getAllProducts()).thenReturn(List.of());
+    void shouldReturnEmptyPageWhenThereAreNoProducts() throws Exception {
+        when(productService.getAllProducts(any(Pageable.class)))
+                .thenReturn(page(List.of(), 0, 20, 0));
 
         mockMvc.perform(get("/products"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$").isArray())
-                .andExpect(jsonPath("$.length()").value(0));
+                .andExpect(jsonPath("$.content").isArray())
+                .andExpect(jsonPath("$.content.length()").value(0))
+                .andExpect(jsonPath("$.totalElements").value(0));
 
-        verify(productService).getAllProducts();
+        verify(productService).getAllProducts(any(Pageable.class));
+    }
+
+    @Test
+    void shouldApplyTheDefaultPageableWhenNoParametersAreSent() throws Exception {
+        when(productService.getAllProducts(any(Pageable.class)))
+                .thenReturn(page(List.of(), 0, 20, 0));
+
+        mockMvc.perform(get("/products")).andExpect(status().isOk());
+
+        ArgumentCaptor<Pageable> captor = ArgumentCaptor.forClass(Pageable.class);
+        verify(productService).getAllProducts(captor.capture());
+
+        Pageable pageable = captor.getValue();
+        assertEquals(0, pageable.getPageNumber());
+        assertEquals(20, pageable.getPageSize());
+        assertEquals(Sort.by(Sort.Direction.DESC, "createdAt"), pageable.getSort());
+    }
+
+    @Test
+    void shouldForwardThePageableSentByTheClient() throws Exception {
+        when(productService.getAllProducts(any(Pageable.class)))
+                .thenReturn(page(List.of(), 2, 5, 0));
+
+        mockMvc.perform(get("/products").param("page", "2").param("size", "5")
+                        .param("sort", "name,asc"))
+                .andExpect(status().isOk());
+
+        ArgumentCaptor<Pageable> captor = ArgumentCaptor.forClass(Pageable.class);
+        verify(productService).getAllProducts(captor.capture());
+
+        Pageable pageable = captor.getValue();
+        assertEquals(2, pageable.getPageNumber());
+        assertEquals(5, pageable.getPageSize());
+        assertEquals(Sort.by(Sort.Direction.ASC, "name"), pageable.getSort());
     }
 
     @Test

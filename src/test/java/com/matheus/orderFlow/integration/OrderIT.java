@@ -153,7 +153,8 @@ class OrderIT extends AbstractIntegrationTest {
 
         mockMvc.perform(get("/orders"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(0));
+                .andExpect(jsonPath("$.content.length()").value(0))
+                .andExpect(jsonPath("$.totalElements").value(0));
     }
 
     @Test
@@ -219,7 +220,7 @@ class OrderIT extends AbstractIntegrationTest {
 
         mockMvc.perform(get("/orders"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].status").value("CONFIRMED"));
+                .andExpect(jsonPath("$.content[0].status").value("CONFIRMED"));
     }
 
     @Test

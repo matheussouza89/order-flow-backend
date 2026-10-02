@@ -95,6 +95,18 @@ import org.springframework.context.annotation.Configuration;
                            `POST /orders/{id}/cancel`. After shipping the operation is refused:
                            that case becomes a return, which is out of scope for this version.
 
+                        ## Pagination
+                        `GET /products` and `GET /orders` return a page rather than the whole
+                        table, with `page`, `size`, `totalElements` and `totalPages` alongside
+                        the `content`.
+
+                        They accept `page`, `size` and `sort` (as `field,asc` or `field,desc`).
+                        The default is 20 items per page, newest first; `size` is capped at 100,
+                        and a larger value is reduced rather than rejected.
+
+                        Asking for a page beyond the last one returns **200** with an empty
+                        `content` — the collection exists, the slice is simply empty.
+
                         ## Errors
                         Every error response shares the same body (`ErrorResponse`), with
                         `status`, `message` and `errors`. The `errors` map is filled only when

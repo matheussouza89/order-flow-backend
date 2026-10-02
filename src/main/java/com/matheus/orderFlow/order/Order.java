@@ -4,6 +4,7 @@ import com.matheus.orderFlow.shared.exception.DomainValidationException;
 import com.matheus.orderFlow.shared.exception.InvalidStatusTransitionException;
 import jakarta.persistence.*;
 import lombok.Getter;
+import org.hibernate.annotations.BatchSize;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.LastModifiedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
@@ -33,6 +34,7 @@ class Order {
     @Column(nullable = false, precision = 12, scale = 2)
     private BigDecimal total;
 
+    @BatchSize(size = 20)
     @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<OrderItem> items = new ArrayList<>();
 

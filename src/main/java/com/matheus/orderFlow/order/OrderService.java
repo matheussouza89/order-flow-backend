@@ -2,9 +2,11 @@ package com.matheus.orderFlow.order;
 
 import com.matheus.orderFlow.product.ProductService;
 import com.matheus.orderFlow.shared.exception.NotFoundException;
+import com.matheus.orderFlow.shared.web.PageResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,10 +27,8 @@ public class OrderService {
     }
 
     @Transactional(readOnly = true)
-    public List<OrderResponse> getAllOrders() {
-        return orderRepository.findAll().stream()
-                .map(OrderResponse::from)
-                .toList();
+    public PageResponse<OrderResponse> getAllOrders(Pageable pageable) {
+        return PageResponse.of(orderRepository.findAll(pageable).map(OrderResponse::from));
     }
 
     @Transactional

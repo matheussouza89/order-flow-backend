@@ -8,7 +8,7 @@ O projeto é um estudo de arquitetura em evolução: cada decisão de desenho es
 documentada abaixo, com o motivo por trás dela. O fluxo de compra está completo
 de ponta a ponta — **catálogo**, **carrinho**, **pedido** e **pagamento** —,
 incluindo o ciclo de vida do pedido e a cobrança assíncrona com política de
-resiliência; autenticação e paginação são os próximos passos
+resiliência; a autenticação é o próximo passo
 (ver [Roadmap](#roadmap)).
 
 ---
@@ -72,13 +72,13 @@ alteração:
 ./mvnw test
 ```
 
-Roda os **115 testes unitários** em poucos segundos, sem Docker.
+Roda os **119 testes unitários** em poucos segundos, sem Docker.
 
 ```bash
 ./mvnw verify
 ```
 
-Roda os unitários **mais os 37 de integração**, que sobem MySQL, Redis e
+Roda os unitários **mais os 44 de integração**, que sobem MySQL, Redis e
 RabbitMQ reais via Testcontainers, e um WireMock fazendo as vezes do gateway de
 pagamento.
 
@@ -100,6 +100,7 @@ com.matheus.orderFlow/
 └── shared/
     ├── config/       configuração da aplicação
     ├── messaging/    exchange e conversor compartilhados
+    ├── web/          PageResponse, envelope das listagens
     └── exception/    exceções e tratamento global
 ```
 
@@ -341,6 +342,54 @@ Os testes sobem um WireMock em porta aleatória e exercitam cada caminho,
 incluindo o mais difícil de demonstrar — com o circuito aberto, a asserção é que
 **nenhuma requisição chegou ao gateway**.
 
+### Listagens paginadas, com envelope próprio
+
+As listagens devolvem uma página, não a tabela inteira:
+
+```json
+{
+  "content": [ ... ],
+  "page": 0,
+  "size": 20,
+  "totalElements": 137,
+  "totalPages": 7
+}
+```
+
+O `Page` do Spring Data poderia ir direto para o JSON, mas ele traz uma dúzia
+de campos internos (`pageable`, `offset`, `numberOfElements`, `empty`...) e o
+formato é do framework. Uma atualização de versão mudaria o contrato de quem
+consome a API — então o `PageResponse` expõe só os cinco campos que importam.
+
+É a mesma regra do `ProductResponse`: o que sai é decisão sua, não reflexo da
+biblioteca. O `PageResponse` *importa* o `Page` para converter, e isso não é
+contradição — o que não pode vazar é o JSON, não a lista de imports.
+
+O tamanho padrão fica na anotação do endpoint, e não no `application.yml`,
+porque `@PageableDefault` sempre fornece um valor próprio: a propriedade
+`default-page-size` ficaria no arquivo parecendo configurar algo, sem nunca ser
+consultada. O `max-page-size` continua no yml, esse o Spring aplica — sem ele,
+`?size=1000000` seria aceito e a paginação não protegeria nada.
+
+A ordenação padrão é explícita (`createdAt` decrescente). Sem ordem definida o
+banco não garante consistência entre consultas, e o mesmo registro pode aparecer
+na página 1 e sumir da 2.
+
+### Coleção carregada em lote, não uma query por item
+
+Listar pedidos montava uma query para os pedidos e **mais uma para os itens de
+cada pedido** — o N+1 clássico. Com 20 pedidos por página, 22 consultas para
+desenhar uma tela.
+
+O reflexo seria `JOIN FETCH`, e é uma armadilha: combinado com paginação, o
+Hibernate avisa `firstResult/maxResults specified with collection fetch` e
+pagina **em memória**, carregando a tabela inteira. O join multiplica linhas, e
+o `LIMIT` cortaria um pedido pela metade.
+
+A saída é `@BatchSize(size = 20)` na coleção: em vez de uma query por pedido, os
+itens vêm num `where order_id in (...)` só. As 22 consultas viram 3 — lista,
+contagem e itens.
+
 ### Testes de integração com infraestrutura real
 
 Os testes unitários cobrem regras e casos de borda com tudo mockado. Os de
@@ -361,7 +410,7 @@ desenvolvimento local.
 
 | Método | Rota | Status | Descrição |
 |---|---|---|---|
-| `GET` | `/products` | 200 | Lista todos os produtos |
+| `GET` | `/products` | 200 | Lista paginada de produtos |
 | `GET` | `/products/{id}` | 200 / 404 | Busca por id |
 | `POST` | `/products` | 201 + `Location` | Cria um produto |
 | `PUT` | `/products/{id}` | 200 / 404 | Atualiza um produto |
@@ -385,13 +434,16 @@ abandonada.
 
 | Método | Rota | Status | Descrição |
 |---|---|---|---|
-| `GET` | `/orders` | 200 | Lista todos os pedidos |
+| `GET` | `/orders` | 200 | Lista paginada de pedidos |
 | `GET` | `/orders/{id}` | 200 / 404 | Busca por id |
 | `POST` | `/orders` | 201 + `Location` | Cria um pedido |
 | `POST` | `/orders/{id}/confirm` | 200 / 404 / 409 | Confirma o pedido |
 | `POST` | `/orders/{id}/ship` | 200 / 404 / 409 | Marca como enviado |
 | `POST` | `/orders/{id}/deliver` | 200 / 404 / 409 | Marca como entregue |
 | `POST` | `/orders/{id}/cancel` | 200 / 404 / 409 | Cancela o pedido |
+
+`GET /products` e `GET /orders` aceitam `?page=`, `?size=` e
+`?sort=campo,asc|desc` — 20 por página, mais recentes primeiro, no máximo 100.
 
 **Pagamentos**
 
@@ -429,12 +481,12 @@ Nome, preço e total vêm do catálogo e do domínio — nunca do cliente.
 - [x] Cobrança assíncrona por evento, com consumidor idempotente
 - [x] Integração com gateway usando timeout, retry, circuit breaker e idempotência
 - [x] Carrinho no Redis com TTL, preço ao vivo e checkout gerando o pedido
-- [x] 152 testes, separados por velocidade (unitários e integração)
+- [x] Listagens paginadas com envelope próprio e coleção carregada em lote
+- [x] 163 testes, separados por velocidade (unitários e integração)
 - [x] Pipeline de CI rodando `mvn verify` a cada push
 - [x] Imagem da aplicação e stack completa em Docker, com conexões por variável de ambiente
 - [x] Documentação OpenAPI
 
 **Próximos passos**
 
-- [ ] Paginação nas listagens
 - [ ] Autenticação com Spring Security + JWT

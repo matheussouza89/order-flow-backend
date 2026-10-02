@@ -1,6 +1,7 @@
 package com.matheus.orderFlow.product;
 
 import com.matheus.orderFlow.shared.exception.ErrorResponse;
+import com.matheus.orderFlow.shared.web.PageResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.headers.Header;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -10,13 +11,16 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springdoc.core.annotations.ParameterObject;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
 import java.net.URI;
-import java.util.List;
 import java.util.UUID;
 
 @Tag(
@@ -29,11 +33,15 @@ import java.util.UUID;
 class ProductController {
     private final ProductService productService;
 
-    @Operation(summary = "Get all products", description = "Returns a list of all products in the system.")
-    @ApiResponse(responseCode = "200", description = "Successfully retrieved list of products")
+    @Operation(summary = "Get all products",
+            description = "Returns a page of products, newest first by default.")
+    @ApiResponse(responseCode = "200", description = "Successfully retrieved page of products")
     @GetMapping
-    public List<ProductResponse> getProducts() {
-        return productService.getAllProducts();
+    public PageResponse<ProductResponse> getProducts(
+            @ParameterObject
+            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable
+    ) {
+        return productService.getAllProducts(pageable);
     }
 
     @Operation(summary = "Get product by ID", description = "Returns a product based on its ID.")

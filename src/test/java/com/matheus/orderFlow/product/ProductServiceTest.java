@@ -2,7 +2,11 @@ package com.matheus.orderFlow.product;
 
 import com.matheus.orderFlow.shared.exception.DomainValidationException;
 import com.matheus.orderFlow.shared.exception.NotFoundException;
+import com.matheus.orderFlow.shared.web.PageResponse;
 import org.junit.jupiter.api.Test;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -57,30 +61,50 @@ public class ProductServiceTest {
                 new BigDecimal("3500.00")
         );
 
-        when(productRepository.findAll()).thenReturn(List.of(product));
+        Pageable pageable = PageRequest.of(0, 20);
+        when(productRepository.findAll(pageable))
+                .thenReturn(new PageImpl<>(List.of(product), pageable, 1));
 
-        List<ProductResponse> result = productService.getAllProducts();
+        PageResponse<ProductResponse> result = productService.getAllProducts(pageable);
+
         assertNotNull(result);
-        assertEquals(1, result.size());
-        assertEquals("Notebook", result.get(0).name());
-        assertEquals("Notebook para trabalho", result.get(0).description());
+        assertEquals(1, result.content().size());
+        assertEquals("Notebook", result.content().get(0).name());
+        assertEquals("Notebook para trabalho", result.content().get(0).description());
         assertEquals(
                 new BigDecimal("3500.00"),
-                result.get(0).price()
+                result.content().get(0).price()
         );
-        verify(productRepository).findAll();
+        verify(productRepository).findAll(pageable);
     }
 
     @Test
-    void shouldReturnEmptyListWhenThereAreNoProducts() {
-        when(productRepository.findAll()).thenReturn(List.of());
+    void shouldCarryThePageMetadata() {
+        Pageable pageable = PageRequest.of(1, 10);
+        when(productRepository.findAll(pageable))
+                .thenReturn(new PageImpl<>(List.of(), pageable, 25));
 
-        List<ProductResponse> result = productService.getAllProducts();
+        PageResponse<ProductResponse> result = productService.getAllProducts(pageable);
+
+        assertEquals(1, result.page());
+        assertEquals(10, result.size());
+        assertEquals(25, result.totalElements());
+        assertEquals(3, result.totalPages());
+    }
+
+    @Test
+    void shouldReturnEmptyPageWhenThereAreNoProducts() {
+        Pageable pageable = PageRequest.of(0, 20);
+        when(productRepository.findAll(pageable))
+                .thenReturn(new PageImpl<>(List.of(), pageable, 0));
+
+        PageResponse<ProductResponse> result = productService.getAllProducts(pageable);
 
         assertNotNull(result);
-        assertTrue(result.isEmpty());
+        assertTrue(result.content().isEmpty());
+        assertEquals(0, result.totalElements());
 
-        verify(productRepository).findAll();
+        verify(productRepository).findAll(pageable);
     }
 
     @Test

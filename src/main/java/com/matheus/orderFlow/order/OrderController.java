@@ -1,6 +1,7 @@
 package com.matheus.orderFlow.order;
 
 import com.matheus.orderFlow.shared.exception.ErrorResponse;
+import com.matheus.orderFlow.shared.web.PageResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.headers.Header;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -9,6 +10,10 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.springdoc.core.annotations.ParameterObject;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
@@ -39,11 +44,15 @@ class OrderController {
         return orderService.getOrder(id);
     }
 
-    @Operation(summary = "Get all orders", description = "Returns a list of all orders in the system.")
-    @ApiResponse(responseCode = "200", description = "Successfully retrieved list of orders")
+    @Operation(summary = "Get all orders",
+            description = "Returns a page of orders, newest first by default.")
+    @ApiResponse(responseCode = "200", description = "Successfully retrieved page of orders")
     @GetMapping
-    public List<OrderResponse> getAllOrders() {
-        return orderService.getAllOrders();
+    public PageResponse<OrderResponse> getAllOrders(
+            @ParameterObject
+            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable
+    ) {
+        return orderService.getAllOrders(pageable);
     }
 
     @Operation(summary = "Create order",
