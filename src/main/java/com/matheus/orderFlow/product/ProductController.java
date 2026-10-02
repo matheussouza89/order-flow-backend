@@ -35,7 +35,11 @@ class ProductController {
 
     @Operation(summary = "Get all products",
             description = "Returns a page of products, newest first by default.")
-    @ApiResponse(responseCode = "200", description = "Successfully retrieved page of products")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Successfully retrieved page of products"),
+            @ApiResponse(responseCode = "400", description = "Sort requested on an unknown field",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
     @GetMapping
     public PageResponse<ProductResponse> getProducts(
             @ParameterObject

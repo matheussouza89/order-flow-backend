@@ -46,7 +46,11 @@ class OrderController {
 
     @Operation(summary = "Get all orders",
             description = "Returns a page of orders, newest first by default.")
-    @ApiResponse(responseCode = "200", description = "Successfully retrieved page of orders")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Successfully retrieved page of orders"),
+            @ApiResponse(responseCode = "400", description = "Sort requested on an unknown field",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
     @GetMapping
     public PageResponse<OrderResponse> getAllOrders(
             @ParameterObject

@@ -1,6 +1,7 @@
 package com.matheus.orderFlow.shared.exception;
 
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.core.PropertyReferenceException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -77,6 +78,22 @@ public class GlobalExceptionHandler {
                 exception.getField() + ": " + exception.getMessage(),
                 errors
         );
+
+        return ResponseEntity.badRequest().body(response);
+    }
+
+    @ExceptionHandler(PropertyReferenceException.class)
+    public ResponseEntity<ErrorResponse> handleUnknownSortProperty(
+            PropertyReferenceException exception
+    ) {
+        String message = "Cannot sort by unknown field '" + exception.getPropertyName() + "'";
+
+        log.warn("Sort requested on unknown property: {}", exception.getPropertyName());
+
+        Map<String, String> errors = new LinkedHashMap<>();
+        errors.put("sort", message);
+
+        ErrorResponse response = new ErrorResponse(400, "sort: " + message, errors);
 
         return ResponseEntity.badRequest().body(response);
     }

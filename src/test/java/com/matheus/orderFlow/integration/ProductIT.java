@@ -8,6 +8,8 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.UUID;
 
+import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.not;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -194,7 +196,10 @@ class ProductIT extends AbstractIntegrationTest {
         createProducts(1);
 
         mockMvc.perform(get("/products").param("sort", "doesNotExist,asc"))
-                .andExpect(status().isInternalServerError());
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors.sort").isNotEmpty())
+                .andExpect(jsonPath("$.message").value(containsString("doesNotExist")))
+                .andExpect(jsonPath("$.message").value(not(containsString("Product"))));
     }
 
     @Test
