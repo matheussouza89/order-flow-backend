@@ -10,7 +10,7 @@ import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 @Import(TestcontainersConfiguration.class)
-@SpringBootTest
+@SpringBootTest(properties = "orderflow.security.bcrypt-strength=4")
 @AutoConfigureMockMvc
 public abstract class AbstractIntegrationTest {
 
@@ -25,6 +25,7 @@ public abstract class AbstractIntegrationTest {
         jdbcTemplate.execute("DELETE FROM order_items");
         jdbcTemplate.execute("DELETE FROM orders");
         jdbcTemplate.execute("DELETE FROM products");
+        jdbcTemplate.execute("DELETE FROM users");
 
         redisConnectionFactory.getConnection().serverCommands().flushDb();
     }

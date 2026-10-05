@@ -14,8 +14,8 @@ import org.springframework.context.annotation.Configuration;
                 description = """
                         ## Purpose
                         REST API for managing a product catalog and customer orders, covering
-                        the shopping cart, order creation, the order lifecycle up to delivery,
-                        and the charge registered for each confirmed order.
+                        accounts, the shopping cart, order creation, the order lifecycle up to
+                        delivery, and the charge registered for each confirmed order.
 
                         ## Context
                         An order is a historical document, not a live view of the catalog. When
@@ -29,6 +29,18 @@ import org.springframework.context.annotation.Configuration;
                         subtotal, total and status are derived by the domain — there is no way
                         to submit an order whose total disagrees with its items, or one that is
                         already delivered.
+
+                        ## Accounts
+                        `POST /auth/register` creates an account and returns **201** with the
+                        new user's URI in `Location`.
+
+                        The role is decided by the system and cannot be sent by the client, so
+                        registering never produces an administrator — the same reasoning that
+                        keeps price and status out of the order payload.
+
+                        Passwords are stored only as a BCrypt hash and never appear in any
+                        response. A password must have at least 8 characters, checked before
+                        hashing.
 
                         ## Cart
                         The cart is the opposite of the order: it holds only the product and the
