@@ -8,8 +8,9 @@ O projeto é um estudo de arquitetura em evolução: cada decisão de desenho es
 documentada abaixo, com o motivo por trás dela. O fluxo de compra está completo
 de ponta a ponta — **catálogo**, **carrinho**, **pedido** e **pagamento** —,
 incluindo o ciclo de vida do pedido e a cobrança assíncrona com política de
-resiliência; a autenticação é o próximo passo
-(ver [Roadmap](#roadmap)).
+resiliência. A autenticação está em andamento: o cadastro de usuários já grava
+a senha como hash, mas o login e as regras de acesso ainda não existem — até lá
+as rotas seguem abertas (ver [Roadmap](#roadmap)).
 
 ---
 
@@ -24,6 +25,7 @@ resiliência; a autenticação é o próximo passo
 | Dado efêmero | Redis (carrinho, com TTL) |
 | Documentação | springdoc-openapi (Swagger UI) |
 | Resiliência | Resilience4j |
+| Segurança | Spring Security (hash de senha; autenticação em andamento) |
 | Testes | JUnit 5, Mockito, Testcontainers, WireMock, Awaitility |
 | Build | Maven |
 
@@ -72,13 +74,13 @@ alteração:
 ./mvnw test
 ```
 
-Roda os **119 testes unitários** em poucos segundos, sem Docker.
+Roda os **150 testes unitários** em poucos segundos, sem Docker.
 
 ```bash
 ./mvnw verify
 ```
 
-Roda os unitários **mais os 44 de integração**, que sobem MySQL, Redis e
+Roda os unitários **mais os 60 de integração**, que sobem MySQL, Redis e
 RabbitMQ reais via Testcontainers, e um WireMock fazendo as vezes do gateway de
 pagamento.
 
@@ -93,6 +95,7 @@ Failsafe pega `*IT.java`.
 
 ```
 com.matheus.orderFlow/
+├── user/             User, UserService, UserRepository, AuthController, UserController, DTOs
 ├── product/          Product, ProductService, ProductRepository, ProductController, DTOs
 ├── cart/             Cart, CartService, CartRepository, CartController, DTOs
 ├── order/            Order, OrderItem, OrderStatus, OrderService, OrderController, DTOs
@@ -101,6 +104,7 @@ com.matheus.orderFlow/
     ├── config/       configuração da aplicação
     ├── messaging/    exchange e conversor compartilhados
     ├── web/          PageResponse, envelope das listagens
+    ├── security/     configuração do Spring Security e hash de senha
     └── exception/    exceções e tratamento global
 ```
 
@@ -342,6 +346,47 @@ Os testes sobem um WireMock em porta aleatória e exercitam cada caminho,
 incluindo o mais difícil de demonstrar — com o circuito aberto, a asserção é que
 **nenhuma requisição chegou ao gateway**.
 
+### Senha nunca é armazenada, e a role não vem do cliente
+
+A senha vai para o banco só como hash BCrypt — função de mão única, com sal
+embutido e propositalmente lenta. A lentidão é a característica, não o defeito:
+com um banco vazado, ela é o que separa "testar milhões de combinações por
+segundo" de "testar algumas por segundo".
+
+O sal explica um detalhe visível nos testes: dois usuários com a mesma senha
+produzem hashes **diferentes**. Sem ele, hashes iguais entregariam que duas
+contas compartilham a senha.
+
+O hash é feito por um `PasswordEncoder` injetado, e não pela biblioteca chamada
+direto na service. Assim o algoritmo é decisão de configuração — trocar BCrypt
+por Argon2 não toca em regra de negócio — e o login usa exatamente o mesmo
+encoder para conferir.
+
+O custo do hash vem de propriedade e cai nos testes. Com o padrão de produção,
+cada usuário criado custaria cerca de 300ms, e a suíte de integração pagaria
+isso dezenas de vezes.
+
+A **role não existe no corpo da requisição**. Aceitá-la deixaria qualquer um se
+cadastrar como administrador — é a mesma regra que mantém preço, total e status
+fora do payload do pedido: o que o domínio decide, o cliente não envia.
+
+### Senha validada antes de virar hash
+
+A entidade guarda `passwordHash` e nunca vê a senha. Isso parece detalhe de
+nome, mas resolve uma armadilha: uma validação de senha dentro do construtor
+estaria checando um hash de 60 caracteres, e regras como "mínimo de 8" ou
+"precisa de número" passariam sempre, sem significar nada.
+
+Por isso a política é um método estático, chamado pela service **antes** de
+hashear — o único momento em que a senha existe em claro. A regra continua no
+domínio, aplicada onde faz sentido.
+
+O mesmo cuidado vale para as operações: existem `changeName`, `changeEmail` e
+`changePasswordHash`, não um `update` com todos os campos. Com o método único,
+renomear alguém obrigava a service a carregar o hash da senha de um lado para o
+outro — e um erro ali reescreveria a credencial numa operação que não deveria
+tocá-la.
+
 ### Listagens paginadas, com envelope próprio
 
 As listagens devolvem uma página, não a tabela inteira:
@@ -405,6 +450,19 @@ desenvolvimento local.
 ---
 
 ## Endpoints
+
+**Contas**
+
+| Método | Rota | Status | Descrição |
+|---|---|---|---|
+| `POST` | `/auth/register` | 201 + `Location` | Cria uma conta |
+| `GET` | `/users/{id}` | 200 / 404 | Busca por id |
+| `PUT` | `/users/{id}/name` | 200 / 400 / 404 | Altera o nome |
+| `PUT` | `/users/{id}/email` | 200 / 400 / 404 / 409 | Altera o email |
+| `PUT` | `/users/{id}/password` | 200 / 400 / 404 | Altera a senha |
+
+O corpo do cadastro leva apenas nome, email e senha — a role é do sistema. A
+senha não aparece em nenhuma resposta.
 
 **Produtos**
 
@@ -482,11 +540,12 @@ Nome, preço e total vêm do catálogo e do domínio — nunca do cliente.
 - [x] Integração com gateway usando timeout, retry, circuit breaker e idempotência
 - [x] Carrinho no Redis com TTL, preço ao vivo e checkout gerando o pedido
 - [x] Listagens paginadas com envelope próprio e coleção carregada em lote
-- [x] 163 testes, separados por velocidade (unitários e integração)
+- [x] Cadastro de usuários com senha em hash BCrypt e role definida pelo sistema
+- [x] 210 testes, separados por velocidade (unitários e integração)
 - [x] Pipeline de CI rodando `mvn verify` a cada push
 - [x] Imagem da aplicação e stack completa em Docker, com conexões por variável de ambiente
 - [x] Documentação OpenAPI
 
 **Próximos passos**
 
-- [ ] Autenticação com Spring Security + JWT
+- [ ] Login com JWT, regras de acesso por rota e recursos filtrados por dono
