@@ -3,10 +3,21 @@ package com.matheus.orderFlow.shared.config;
 import io.swagger.v3.oas.annotations.OpenAPIDefinition;
 import io.swagger.v3.oas.annotations.info.Contact;
 import io.swagger.v3.oas.annotations.info.Info;
+import io.swagger.v3.oas.annotations.enums.SecuritySchemeType;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.security.SecurityScheme;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
+@SecurityScheme(
+        name = "bearerAuth",
+        type = SecuritySchemeType.HTTP,
+        scheme = "bearer",
+        bearerFormat = "JWT",
+        description = "Paste the token returned by POST /auth/login."
+)
 @OpenAPIDefinition(
+        security = @SecurityRequirement(name = "bearerAuth"),
         info = @Info(
                 title = "OrderFlow API",
                 version = "1.0.0",
@@ -118,6 +129,28 @@ import org.springframework.context.annotation.Configuration;
 
                         Asking for a page beyond the last one returns **200** with an empty
                         `content` — the collection exists, the slice is simply empty.
+
+                        ## Authentication
+                        `POST /auth/login` returns a JWT valid for one hour. Send it as
+                        `Authorization: Bearer <token>` — in Swagger UI, use the **Authorize**
+                        button.
+
+                        Browsing the catalog (`GET /products`), registering and logging in need
+                        no token. Everything else does. Changing the catalog additionally
+                        requires the `ADMIN` role.
+
+                        Two statuses that are easy to confuse:
+
+                        - **401** — no token, or a token that is invalid, tampered with or expired
+                        - **403** — a valid token whose role is not allowed to do this
+
+                        A login failure always answers the same way, whether the email is unknown
+                        or the password is wrong, so the endpoint cannot be used to find out who
+                        has an account.
+
+                        The token carries only the user id and the role. Its payload is encoded,
+                        not encrypted — anyone holding the token can read it — so no personal
+                        data is placed in it. A token cannot be revoked before it expires.
 
                         ## Errors
                         Every error response shares the same body (`ErrorResponse`), with

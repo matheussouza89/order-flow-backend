@@ -151,4 +151,15 @@ public class GlobalExceptionHandler {
 
         return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
     }
+
+    @ExceptionHandler(InvalidLoginException.class)
+    public ResponseEntity<ErrorResponse> handleInvalidLogin(
+            InvalidLoginException exception
+    ) {
+        log.warn("Invalid login attempt: {}", exception.getMessage());
+
+        ErrorResponse response = new ErrorResponse(401, exception.getMessage());
+
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
+    }
 }

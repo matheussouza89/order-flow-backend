@@ -8,8 +8,11 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
+import com.matheus.orderFlow.shared.security.TokenService;
 
-@Import(TestcontainersConfiguration.class)
+import java.util.UUID;
+
+@Import({TestcontainersConfiguration.class, DefaultAuthenticationConfiguration.class})
 @SpringBootTest(properties = "orderflow.security.bcrypt-strength=4")
 @AutoConfigureMockMvc
 public abstract class AbstractIntegrationTest {
@@ -19,6 +22,21 @@ public abstract class AbstractIntegrationTest {
 
     @Autowired
     private RedisConnectionFactory redisConnectionFactory;
+
+    @Autowired
+    private TokenService tokenService;
+
+    protected String asUser() {
+        return bearer(UUID.randomUUID(), "USER");
+    }
+
+    protected String asAdmin() {
+        return bearer(UUID.randomUUID(), "ADMIN");
+    }
+
+    protected String bearer(UUID userId, String role) {
+        return "Bearer " + tokenService.generateToken(userId, role);
+    }
 
     @BeforeEach
     void cleanDatabase() {

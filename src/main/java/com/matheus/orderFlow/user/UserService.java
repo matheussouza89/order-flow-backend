@@ -1,21 +1,35 @@
 package com.matheus.orderFlow.user;
 
+import com.matheus.orderFlow.shared.exception.InvalidLoginException;
 import com.matheus.orderFlow.shared.exception.NotFoundException;
 import com.matheus.orderFlow.shared.exception.UserAlreadyExistsException;
+import com.matheus.orderFlow.shared.security.TokenService;
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Optional;
 import java.util.UUID;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class UserService {
+    private static final String ABSENT_USER_PLACEHOLDER = "there-is-no-user-with-this-email";
+
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final TokenService tokenService;
+
+    private String absentUserHash;
+
+    @PostConstruct
+    void prepareAbsentUserHash() {
+        absentUserHash = passwordEncoder.encode(ABSENT_USER_PLACEHOLDER);
+    }
 
     @Transactional
     public UserResponse createUser(UserDto dto) {
@@ -69,6 +83,24 @@ public class UserService {
         log.info("Updating user password: id={}", id);
 
         return UserResponse.from(userRepository.save(user));
+    }
+
+    @Transactional(readOnly = true)
+    public TokenResponse login(String email, String password) {
+        User user = userRepository.findByEmail(email).orElse(null);
+
+        String hashToCheck = user == null ? absentUserHash : user.getPasswordHash();
+
+        if (!passwordEncoder.matches(password, hashToCheck) || user == null) {
+            log.warn("Failed login attempt");
+            throw new InvalidLoginException("Invalid credentials");
+        }
+
+        log.info("User logged in: id={}", user.getId());
+
+        String token = tokenService.generateToken(user.getId(), user.getRole().name());
+
+        return TokenResponse.bearer(token, tokenService.getExpiration().toSeconds());
     }
 
     private User findOrThrow(UUID id) {

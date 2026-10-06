@@ -1,6 +1,8 @@
 package com.matheus.orderFlow.user;
 
 import com.matheus.orderFlow.shared.exception.DomainValidationException;
+import com.matheus.orderFlow.shared.exception.InvalidLoginException;
+import com.matheus.orderFlow.shared.security.TokenService;
 import com.matheus.orderFlow.shared.exception.NotFoundException;
 import com.matheus.orderFlow.shared.exception.UserAlreadyExistsException;
 import org.junit.jupiter.api.Test;
@@ -10,11 +12,13 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
+import java.time.Duration;
 import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -25,6 +29,9 @@ class UserServiceTest {
 
     @Mock
     private PasswordEncoder passwordEncoder;
+
+    @Mock
+    private TokenService tokenService;
 
     @InjectMocks
     private UserService userService;
@@ -79,6 +86,64 @@ class UserServiceTest {
 
         verifyNoInteractions(passwordEncoder);
         verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    void shouldReturnABearerTokenOnSuccessfulLogin() {
+        User user = user();
+        when(userRepository.findByEmail("matheus@example.com")).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("senhaSegura1", HASH)).thenReturn(true);
+        when(tokenService.generateToken(any(), eq("USER"))).thenReturn("token-assinado");
+        when(tokenService.getExpiration()).thenReturn(Duration.ofHours(1));
+
+        TokenResponse response = userService.login("matheus@example.com", "senhaSegura1");
+
+        assertEquals("token-assinado", response.token());
+        assertEquals("Bearer", response.type());
+        assertEquals(3600, response.expiresIn());
+    }
+
+    @Test
+    void shouldRejectLoginWithWrongPassword() {
+        when(userRepository.findByEmail("matheus@example.com")).thenReturn(Optional.of(user()));
+        when(passwordEncoder.matches(eq("errada"), any())).thenReturn(false);
+
+        assertThrows(InvalidLoginException.class,
+                () -> userService.login("matheus@example.com", "errada"));
+
+        verifyNoInteractions(tokenService);
+    }
+
+    @Test
+    void shouldRejectLoginWithUnknownEmail() {
+        when(userRepository.findByEmail("ninguem@example.com")).thenReturn(Optional.empty());
+        when(passwordEncoder.matches(eq("qualquer"), any())).thenReturn(false);
+
+        assertThrows(InvalidLoginException.class,
+                () -> userService.login("ninguem@example.com", "qualquer"));
+
+        verifyNoInteractions(tokenService);
+    }
+
+    @Test
+    void shouldHashCheckEvenWhenTheEmailDoesNotExist() {
+        userService.prepareAbsentUserHash();
+        when(userRepository.findByEmail("ninguem@example.com")).thenReturn(Optional.empty());
+        when(passwordEncoder.matches(eq("qualquer"), any())).thenReturn(false);
+
+        assertThrows(InvalidLoginException.class,
+                () -> userService.login("ninguem@example.com", "qualquer"));
+
+        verify(passwordEncoder).matches(eq("qualquer"), any());
+    }
+
+    @Test
+    void shouldBuildTheAbsentUserHashWithTheConfiguredEncoder() {
+        when(passwordEncoder.encode(any())).thenReturn("$2a$04$hashdescartavel");
+
+        userService.prepareAbsentUserHash();
+
+        verify(passwordEncoder).encode(any());
     }
 
     @Test

@@ -7,6 +7,7 @@ import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.util.Base64;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -228,6 +229,110 @@ class UserIT extends AbstractIntegrationTest {
                 .andExpect(status().isBadRequest());
 
         assertEquals(hashBefore, storedHash(userId));
+    }
+
+    private String login(String email, String password) throws Exception {
+        return mockMvc.perform(post("/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                { "email": "%s", "password": "%s" }
+                                """.formatted(email, password)))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+    }
+
+    @Test
+    void shouldReturnABearerTokenOnLogin() throws Exception {
+        register("Matheus", "matheus@example.com", "senhaSegura1");
+
+        String response = login("matheus@example.com", "senhaSegura1");
+
+        assertEquals("Bearer", JsonPath.read(response, "$.type"));
+        assertEquals(3600, (int) JsonPath.read(response, "$.expiresIn"));
+
+        String token = JsonPath.read(response, "$.token");
+        assertEquals(3, token.split("\\.").length);
+    }
+
+    @Test
+    void shouldCarryTheUserIdAndRoleInTheToken() throws Exception {
+        String userId = register("Matheus", "matheus@example.com", "senhaSegura1");
+
+        String token = JsonPath.read(login("matheus@example.com", "senhaSegura1"), "$.token");
+
+        String payload = new String(Base64.getUrlDecoder().decode(token.split("\\.")[1]));
+
+        assertTrue(payload.contains(userId));
+        assertTrue(payload.contains("USER"));
+    }
+
+    @Test
+    void shouldNotCarryPersonalDataInTheToken() throws Exception {
+        register("Matheus", "matheus@example.com", "senhaSegura1");
+
+        String token = JsonPath.read(login("matheus@example.com", "senhaSegura1"), "$.token");
+
+        String payload = new String(Base64.getUrlDecoder().decode(token.split("\\.")[1]));
+
+        assertFalse(payload.contains("matheus@example.com"));
+        assertFalse(payload.contains("Matheus"));
+        assertFalse(payload.contains("senhaSegura1"));
+    }
+
+    @Test
+    void shouldRejectLoginWithWrongPassword() throws Exception {
+        register("Matheus", "matheus@example.com", "senhaSegura1");
+
+        mockMvc.perform(post("/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                { "email": "matheus@example.com", "password": "errada123" }
+                                """))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void shouldAnswerTheSameForUnknownEmailAndWrongPassword() throws Exception {
+        register("Matheus", "matheus@example.com", "senhaSegura1");
+
+        String wrongPassword = mockMvc.perform(post("/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                { "email": "matheus@example.com", "password": "errada123" }
+                                """))
+                .andExpect(status().isUnauthorized())
+                .andReturn().getResponse().getContentAsString();
+
+        String unknownEmail = mockMvc.perform(post("/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                { "email": "ninguem@example.com", "password": "errada123" }
+                                """))
+                .andExpect(status().isUnauthorized())
+                .andReturn().getResponse().getContentAsString();
+
+        assertEquals(wrongPassword, unknownEmail);
+    }
+
+    @Test
+    void shouldLoginWithTheNewPasswordAfterChangingIt() throws Exception {
+        String userId = register("Matheus", "matheus@example.com", "senhaSegura1");
+
+        mockMvc.perform(put("/users/{id}/password", userId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{ \"password\": \"outraSenhaForte1\" }"))
+                .andExpect(status().isOk());
+
+        login("matheus@example.com", "outraSenhaForte1");
+
+        mockMvc.perform(post("/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                { "email": "matheus@example.com", "password": "senhaSegura1" }
+                                """))
+                .andExpect(status().isUnauthorized());
     }
 
     @Test

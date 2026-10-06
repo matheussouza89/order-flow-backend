@@ -57,4 +57,21 @@ class AuthController {
 
         return ResponseEntity.created(location).body(created);
     }
+
+    @Operation(summary = "Login",
+            description = """
+                    Authenticates a user and returns a JWT token. The token must be sent in the
+                    Authorization header of subsequent requests to protected endpoints.
+                    """)
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Authentication successful"),
+            @ApiResponse(responseCode = "401",
+                    description = "Invalid credentials. The same response is returned whether the "
+                            + "email is unknown or the password is wrong.",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    @PostMapping("/login")
+    TokenResponse login(@RequestBody LoginDto dto) {
+        return userService.login(dto.email(), dto.password());
+    }
 }

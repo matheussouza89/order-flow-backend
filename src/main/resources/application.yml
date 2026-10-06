@@ -30,6 +30,10 @@ spring:
     password: ${SPRING_RABBITMQ_PASSWORD:orderflow}
 
 orderflow:
+  security:
+    jwt:
+      secret: ${JWT_SECRET:local-development-secret-change-in-production}
+      expiration: ${JWT_EXPIRATION:1h}
   payment:
     gateway:
       url: ${PAYMENT_GATEWAY_URL:http://localhost:8090}

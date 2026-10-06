@@ -8,9 +8,9 @@ O projeto é um estudo de arquitetura em evolução: cada decisão de desenho es
 documentada abaixo, com o motivo por trás dela. O fluxo de compra está completo
 de ponta a ponta — **catálogo**, **carrinho**, **pedido** e **pagamento** —,
 incluindo o ciclo de vida do pedido e a cobrança assíncrona com política de
-resiliência. A autenticação está em andamento: o cadastro de usuários já grava
-a senha como hash, mas o login e as regras de acesso ainda não existem — até lá
-as rotas seguem abertas (ver [Roadmap](#roadmap)).
+resiliência, com autenticação por JWT e rotas protegidas por papel. Falta
+vincular carrinho e pedidos ao usuário do token — hoje qualquer usuário
+autenticado alcança os recursos de outro (ver [Roadmap](#roadmap)).
 
 ---
 
@@ -25,7 +25,7 @@ as rotas seguem abertas (ver [Roadmap](#roadmap)).
 | Dado efêmero | Redis (carrinho, com TTL) |
 | Documentação | springdoc-openapi (Swagger UI) |
 | Resiliência | Resilience4j |
-| Segurança | Spring Security (hash de senha; autenticação em andamento) |
+| Segurança | Spring Security + JWT (oauth2-resource-server) |
 | Testes | JUnit 5, Mockito, Testcontainers, WireMock, Awaitility |
 | Build | Maven |
 
@@ -45,6 +45,11 @@ A imagem da aplicação é construída pelo Dockerfile em dois estágios: o
 primeiro compila com Maven, o segundo leva apenas o jar para uma imagem com
 JRE. As conexões vêm de variáveis de ambiente, com o ambiente local como
 padrão — por isso a mesma imagem serve para qualquer ambiente.
+
+⚠️ Uma dessas variáveis não deve usar o padrão fora da máquina local:
+`JWT_SECRET` assina os tokens, e conhecê-la permite forjar um token de qualquer
+usuário, inclusive administrador. São no mínimo 32 caracteres; abaixo disso a
+aplicação se recusa a subir.
 
 Para desenvolver com a aplicação fora do container (Java 21 necessário), suba
 só a infraestrutura e rode pelo Maven:
@@ -74,13 +79,13 @@ alteração:
 ./mvnw test
 ```
 
-Roda os **150 testes unitários** em poucos segundos, sem Docker.
+Roda os **159 testes unitários** em poucos segundos, sem Docker.
 
 ```bash
 ./mvnw verify
 ```
 
-Roda os unitários **mais os 60 de integração**, que sobem MySQL, Redis e
+Roda os unitários **mais os 84 de integração**, que sobem MySQL, Redis e
 RabbitMQ reais via Testcontainers, e um WireMock fazendo as vezes do gateway de
 pagamento.
 
@@ -104,7 +109,7 @@ com.matheus.orderFlow/
     ├── config/       configuração da aplicação
     ├── messaging/    exchange e conversor compartilhados
     ├── web/          PageResponse, envelope das listagens
-    ├── security/     configuração do Spring Security e hash de senha
+    ├── security/     cadeia de filtros, emissão do token e hash de senha
     └── exception/    exceções e tratamento global
 ```
 
@@ -387,6 +392,63 @@ renomear alguém obrigava a service a carregar o hash da senha de um lado para o
 outro — e um erro ali reescreveria a credencial numa operação que não deveria
 tocá-la.
 
+### Token assinado, sem estado no servidor
+
+O login devolve um JWT válido por uma hora; as demais rotas o exigem no
+cabeçalho `Authorization`. O servidor não guarda quem está logado — o token
+carrega a identidade, assinada, e qualquer instância valida sozinha com a
+chave.
+
+Isso tem um preço que vale registrar: **token não se cancela**. Emitiu, vale até
+expirar, mesmo que o usuário seja apagado no minuto seguinte. É o que se paga
+por não guardar estado, e é o motivo da validade curta. Revogação de verdade
+exigiria uma lista negra no Redis — ou seja, o estado de volta.
+
+O conteúdo do token é codificado, **não criptografado**: qualquer um que o
+tenha consegue ler. A assinatura prova que ninguém alterou, não esconde. Por
+isso ele leva apenas o id do usuário e a role — nunca nome, email ou qualquer
+dado pessoal, e há teste decodificando o payload para garantir.
+
+A validação fica a cargo do `oauth2-resource-server`, e não de um filtro
+escrito à mão. O motivo é concreto: um validador ingênuo lê do próprio token
+qual algoritmo usar, e aceita um token forjado que declara `"alg": "none"`. É
+uma falha que passa em todos os testes de caminho feliz. O algoritmo aqui é
+fixado na configuração e o que o token afirma é ignorado.
+
+### 401 e 403 são respostas diferentes
+
+| | Significa |
+|---|---|
+| **401** | sem token, ou token inválido, adulterado ou expirado |
+| **403** | token válido, mas a role não permite esta operação |
+
+Manter a distinção importa: 401 diz "identifique-se", 403 diz "já sei quem você
+é, e não pode". Responder 401 para os dois faria o cliente tentar logar de novo
+sem necessidade.
+
+Esses dois status são os únicos que **não** passam pelo `GlobalExceptionHandler`.
+O Spring Security rejeita no filtro, antes de qualquer controller — sem
+controller, não há `@RestControllerAdvice`, e o corpo sairia vazio. Dois
+handlers registrados na cadeia devolvem o mesmo `ErrorResponse` das outras
+falhas, para a API não ter duas gramáticas de erro.
+
+### Falha de login não revela quem tem conta
+
+Email inexistente e senha errada produzem resposta idêntica. Diferenciar as
+duas transformaria o login num verificador de cadastro: com uma lista de emails
+vazada de outro site, dá para descobrir quais são clientes daqui.
+
+A mensagem igual não basta, porque **o tempo também é observável**. Conferir uma
+senha custa centenas de milissegundos de propósito; email inexistente retornaria
+quase instantâneo, e a diferença seria medível. Por isso a verificação de hash
+roda também quando o email não existe, contra um hash descartável, para os dois
+caminhos custarem o mesmo.
+
+Esse hash é gerado pelo próprio `PasswordEncoder` na subida da aplicação, e não
+fixado no código. O custo fica gravado dentro do hash: um valor fixo gerado com
+custo baixo continuaria rápido em produção, e o vazamento seguiria aberto —
+agora disfarçado.
+
 ### Listagens paginadas, com envelope próprio
 
 As listagens devolvem uma página, não a tabela inteira:
@@ -456,6 +518,7 @@ desenvolvimento local.
 | Método | Rota | Status | Descrição |
 |---|---|---|---|
 | `POST` | `/auth/register` | 201 + `Location` | Cria uma conta |
+| `POST` | `/auth/login` | 200 / 401 | Autentica e devolve o token |
 | `GET` | `/users/{id}` | 200 / 404 | Busca por id |
 | `PUT` | `/users/{id}/name` | 200 / 400 / 404 | Altera o nome |
 | `PUT` | `/users/{id}/email` | 200 / 400 / 404 / 409 | Altera o email |
@@ -463,6 +526,19 @@ desenvolvimento local.
 
 O corpo do cadastro leva apenas nome, email e senha — a role é do sistema. A
 senha não aparece em nenhuma resposta.
+
+**Quem acessa o quê**
+
+| Rota | Exige |
+|---|---|
+| `/auth/**`, Swagger, health | nada |
+| `GET /products`, `GET /products/{id}` | nada — é vitrine |
+| `POST`/`PUT`/`DELETE` `/products` | papel `ADMIN` |
+| todo o resto | autenticação |
+
+A última linha é literal: a regra final é *"qualquer outra requisição exige
+autenticação"*. Assim uma rota nova nasce protegida, e esquecer de declará-la
+falha fechando, não abrindo.
 
 **Produtos**
 
@@ -541,11 +617,12 @@ Nome, preço e total vêm do catálogo e do domínio — nunca do cliente.
 - [x] Carrinho no Redis com TTL, preço ao vivo e checkout gerando o pedido
 - [x] Listagens paginadas com envelope próprio e coleção carregada em lote
 - [x] Cadastro de usuários com senha em hash BCrypt e role definida pelo sistema
-- [x] 210 testes, separados por velocidade (unitários e integração)
+- [x] Login com JWT, rotas protegidas por autenticação e papel
+- [x] 243 testes, separados por velocidade (unitários e integração)
 - [x] Pipeline de CI rodando `mvn verify` a cada push
 - [x] Imagem da aplicação e stack completa em Docker, com conexões por variável de ambiente
 - [x] Documentação OpenAPI
 
 **Próximos passos**
 
-- [ ] Login com JWT, regras de acesso por rota e recursos filtrados por dono
+- [ ] Recursos filtrados por dono: carrinho e pedidos vinculados ao usuário do token
