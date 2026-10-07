@@ -2,10 +2,12 @@ package com.matheus.orderFlow.order;
 
 import com.matheus.orderFlow.product.ProductService;
 import com.matheus.orderFlow.shared.exception.NotFoundException;
+import com.matheus.orderFlow.shared.security.AuthenticatedUser;
 import com.matheus.orderFlow.shared.web.PageResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,15 +22,20 @@ public class OrderService {
     private final OrderRepository orderRepository;
     private final ProductService productService;
     private final ApplicationEventPublisher events;
+    private final AuthenticatedUser authenticatedUser;
 
     @Transactional(readOnly = true)
     public OrderResponse getOrder(UUID orderId) {
-        return OrderResponse.from(findOrThrow(orderId));
+        return OrderResponse.from(findOwnedOrThrow(orderId));
     }
 
     @Transactional(readOnly = true)
     public PageResponse<OrderResponse> getAllOrders(Pageable pageable) {
-        return PageResponse.of(orderRepository.findAll(pageable).map(OrderResponse::from));
+        Page<Order> orders = authenticatedUser.isAdmin()
+                ? orderRepository.findAll(pageable)
+                : orderRepository.findByUserId(authenticatedUser.requireId(), pageable);
+
+        return PageResponse.of(orders.map(OrderResponse::from));
     }
 
     @Transactional
@@ -41,7 +48,8 @@ public class OrderService {
                     return new OrderItem(productResponse.id(), productResponse.name(), productResponse.price(), itemDto.quantity());
                 })
                 .toList();
-        Order savedOrder = orderRepository.save(new Order(orderItems));
+        Order savedOrder = orderRepository.save(
+                new Order(authenticatedUser.requireId(), orderItems));
 
         log.info("Order created: id={} total={} items={}",
                 savedOrder.getId(), savedOrder.getTotal(), savedOrder.getItems().size());
@@ -54,9 +62,20 @@ public class OrderService {
                 .orElseThrow(() -> new NotFoundException(orderId));
     }
 
+    private Order findOwnedOrThrow(UUID orderId) {
+        Order order = findOrThrow(orderId);
+
+        if (!authenticatedUser.isAdmin() && !order.belongsTo(authenticatedUser.requireId())) {
+            log.warn("Order requested by a user who does not own it: id={}", orderId);
+            throw new NotFoundException(orderId);
+        }
+
+        return order;
+    }
+
     @Transactional
     public OrderResponse confirmOrder(UUID orderId) {
-        Order order = findOrThrow(orderId);
+        Order order = findOwnedOrThrow(orderId);
         OrderStatus previousStatus = order.getStatus();
 
         order.confirm();
@@ -65,6 +84,7 @@ public class OrderService {
         events.publishEvent(
                 new OrderConfirmedEvent(
                         order.getId(),
+                        order.getUserId(),
                         order.getTotal(),
                         order.getUpdatedAt()
                 )
@@ -106,7 +126,7 @@ public class OrderService {
 
     @Transactional
     public OrderResponse cancelOrder(UUID orderId) {
-        Order order = findOrThrow(orderId);
+        Order order = findOwnedOrThrow(orderId);
         OrderStatus previousStatus = order.getStatus();
 
         order.cancel();

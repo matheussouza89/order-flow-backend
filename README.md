@@ -8,9 +8,8 @@ O projeto é um estudo de arquitetura em evolução: cada decisão de desenho es
 documentada abaixo, com o motivo por trás dela. O fluxo de compra está completo
 de ponta a ponta — **catálogo**, **carrinho**, **pedido** e **pagamento** —,
 incluindo o ciclo de vida do pedido e a cobrança assíncrona com política de
-resiliência, com autenticação por JWT e rotas protegidas por papel. Falta
-vincular carrinho e pedidos ao usuário do token — hoje qualquer usuário
-autenticado alcança os recursos de outro (ver [Roadmap](#roadmap)).
+resiliência, com autenticação por JWT, rotas protegidas por papel e recursos
+vinculados ao usuário do token (ver [Roadmap](#roadmap)).
 
 ---
 
@@ -79,13 +78,13 @@ alteração:
 ./mvnw test
 ```
 
-Roda os **159 testes unitários** em poucos segundos, sem Docker.
+Roda os **164 testes unitários** em poucos segundos, sem Docker.
 
 ```bash
 ./mvnw verify
 ```
 
-Roda os unitários **mais os 84 de integração**, que sobem MySQL, Redis e
+Roda os unitários **mais os 90 de integração**, que sobem MySQL, Redis e
 RabbitMQ reais via Testcontainers, e um WireMock fazendo as vezes do gateway de
 pagamento.
 
@@ -415,6 +414,69 @@ qual algoritmo usar, e aceita um token forjado que declara `"alg": "none"`. É
 uma falha que passa em todos os testes de caminho feliz. O algoritmo aqui é
 fixado na configuração e o que o token afirma é ignorado.
 
+### Recurso alheio responde 404, não 403
+
+Pedido, carrinho e pagamento pertencem a quem os criou. Pedir o de outro
+responde **404**, como se não existisse.
+
+Um 403 seria mais literal — "existe, mas não é seu" — e é justamente o problema:
+ele confirma que aquele identificador existe. Varrendo ids, dá para contar
+quantos pedidos a loja tem, ou descobrir se uma compra específica aconteceu.
+Quando a própria existência do recurso é informação, negar é dizer menos do que
+esconder.
+
+A regra não cabe em anotação. `@PostAuthorize` roda **depois** do método — numa
+escrita, o efeito já aconteceu — e devolve 403, o que anula o ponto acima. Por
+isso o dono é verificado em código na service, e a listagem filtra na consulta
+em vez de carregar tudo e descartar.
+
+O carrinho resolve isso de forma mais forte: o `cartId` saiu da URL e vem do
+token. Não há identificador alheio a tentar, porque não há identificador.
+
+### Regra de papel na anotação, regra de dono no código
+
+As regras de papel vivem em `@PreAuthorize` nas controllers, não na cadeia de
+filtros. Na cadeia elas dependeriam da ordem das linhas — `/products/**` depois
+de `GET /products` funciona; antes, fecha a vitrine — e cresceriam num arquivo
+distante do endpoint que governam.
+
+A cadeia fica com o que é mesmo transversal: rota pública e o piso
+`anyRequest().authenticated()`.
+
+Já a anotação fica na **controller**, e não na service, por um motivo concreto
+deste projeto: o `PaymentService` é chamado pelo consumidor do RabbitMQ, onde
+não existe usuário autenticado. Um `@PreAuthorize` ali faria o consumidor
+falhar em produção, longe da causa. O que precisa valer nas duas portas de
+entrada é código comum.
+
+Um efeito colateral que vale saber: 403 negado na cadeia passa pelo
+`accessDeniedHandler`, mas negado no `@PreAuthorize` sobe até o
+`GlobalExceptionHandler`. São caminhos diferentes para o mesmo status, e os
+dois precisam existir.
+
+### Confirmar é do cliente, despachar é da operação
+
+```
+PENDING ──confirm──→ CONFIRMED ──ship──→ SHIPPED ──deliver──→ DELIVERED
+          cliente                ADMIN            ADMIN
+```
+
+A máquina de estados já existia; faltava dizer **quem** aciona cada transição.
+Sem isso, o cliente marcava o próprio pedido como entregue — ele nunca despachou
+nada. `confirm` e `cancel` são decisões de compra; `ship` e `deliver` registram
+um fato operacional.
+
+### Pagamento recebe o dono pelo evento
+
+O pagamento precisa saber de quem é, mas o `PaymentService` não conhece o
+`OrderService` — e não deve: o consumidor do RabbitMQ passaria a depender do
+pedido para processar uma cobrança.
+
+A solução usa o que já existia: o `userId` viaja no `OrderConfirmedEvent`, que
+é o ponto de integração entre os dois agregados. O pagamento guarda o dono como
+cópia, pela mesma razão que o item do pedido guarda o preço — é um fato do
+momento, não uma consulta viva.
+
 ### 401 e 403 são respostas diferentes
 
 | | Significa |
@@ -534,6 +596,7 @@ senha não aparece em nenhuma resposta.
 | `/auth/**`, Swagger, health | nada |
 | `GET /products`, `GET /products/{id}` | nada — é vitrine |
 | `POST`/`PUT`/`DELETE` `/products` | papel `ADMIN` |
+| `POST /orders/{id}/ship` e `/deliver` | papel `ADMIN` |
 | todo o resto | autenticação |
 
 A última linha é literal: a regra final é *"qualquer outra requisição exige
@@ -554,14 +617,15 @@ falha fechando, não abrindo.
 
 | Método | Rota | Status | Descrição |
 |---|---|---|---|
-| `GET` | `/carts/{cartId}` | 200 / 404 | Busca o carrinho com o preço atual |
-| `POST` | `/carts/{cartId}/items` | 200 / 400 / 404 | Soma à quantidade; cria o carrinho no primeiro item |
-| `PUT` | `/carts/{cartId}/items/{productId}` | 200 / 400 / 404 | Substitui a quantidade; zero remove |
-| `DELETE` | `/carts/{cartId}/items/{productId}` | 200 / 404 | Remove o item |
-| `POST` | `/carts/{cartId}/checkout` | 200 / 400 / 404 / 409 | Gera o pedido e descarta o carrinho |
+| `GET` | `/cart` | 200 / 404 | Busca o carrinho com o preço atual |
+| `POST` | `/cart/items` | 200 / 400 / 404 | Soma à quantidade; cria o carrinho no primeiro item |
+| `PUT` | `/cart/items/{productId}` | 200 / 400 / 404 | Substitui a quantidade; zero remove |
+| `DELETE` | `/cart/items/{productId}` | 200 / 404 | Remove o item |
+| `POST` | `/cart/checkout` | 200 / 400 / 409 | Gera o pedido e descarta o carrinho |
 
-Não há rota para criar um carrinho: ele nasce no primeiro item e morre no
-checkout ou no fim do TTL. Um `POST /carts` vazio só criaria chave para ser
+Não há `cartId` na URL: `/cart` é sempre o carrinho de quem chama, identificado
+pelo token. Também não há rota para criar um: ele nasce no primeiro item e morre
+no checkout ou no fim do TTL. Um `POST /carts` vazio só criaria chave para ser
 abandonada.
 
 **Pedidos**
@@ -572,8 +636,8 @@ abandonada.
 | `GET` | `/orders/{id}` | 200 / 404 | Busca por id |
 | `POST` | `/orders` | 201 + `Location` | Cria um pedido |
 | `POST` | `/orders/{id}/confirm` | 200 / 404 / 409 | Confirma o pedido |
-| `POST` | `/orders/{id}/ship` | 200 / 404 / 409 | Marca como enviado |
-| `POST` | `/orders/{id}/deliver` | 200 / 404 / 409 | Marca como entregue |
+| `POST` | `/orders/{id}/ship` | 200 / 403 / 404 / 409 | Marca como enviado (ADMIN) |
+| `POST` | `/orders/{id}/deliver` | 200 / 403 / 404 / 409 | Marca como entregue (ADMIN) |
 | `POST` | `/orders/{id}/cancel` | 200 / 404 / 409 | Cancela o pedido |
 
 `GET /products` e `GET /orders` aceitam `?page=`, `?size=` e
@@ -618,11 +682,11 @@ Nome, preço e total vêm do catálogo e do domínio — nunca do cliente.
 - [x] Listagens paginadas com envelope próprio e coleção carregada em lote
 - [x] Cadastro de usuários com senha em hash BCrypt e role definida pelo sistema
 - [x] Login com JWT, rotas protegidas por autenticação e papel
-- [x] 243 testes, separados por velocidade (unitários e integração)
+- [x] Recursos vinculados ao dono: carrinho, pedidos e pagamentos
+- [x] 254 testes, separados por velocidade (unitários e integração)
 - [x] Pipeline de CI rodando `mvn verify` a cada push
 - [x] Imagem da aplicação e stack completa em Docker, com conexões por variável de ambiente
 - [x] Documentação OpenAPI
 
 **Próximos passos**
 
-- [ ] Recursos filtrados por dono: carrinho e pedidos vinculados ao usuário do token

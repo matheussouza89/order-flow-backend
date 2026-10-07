@@ -5,6 +5,11 @@ import com.matheus.orderFlow.shared.exception.DomainValidationException;
 import com.matheus.orderFlow.shared.exception.InvalidStatusTransitionException;
 import com.matheus.orderFlow.shared.exception.NotFoundException;
 import com.matheus.orderFlow.product.ProductService;
+import com.matheus.orderFlow.shared.security.AuthenticatedUser;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.PageImpl;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -38,8 +43,73 @@ public class OrderServiceTest {
     @Mock
     private ApplicationEventPublisher events;
 
+    @Mock
+    private AuthenticatedUser authenticatedUser;
+
+    private static final UUID OWNER_ID = UUID.randomUUID();
+
+    @BeforeEach
+    void authenticateAsTheOwner() {
+        lenient().when(authenticatedUser.requireId()).thenReturn(OWNER_ID);
+    }
+
     @InjectMocks
     private OrderService orderService;
+
+    @Test
+    void shouldHideAnOrderThatBelongsToAnotherUser() {
+        UUID orderId = UUID.randomUUID();
+        Order order = orderAt(OrderStatus.PENDING);
+        when(orderRepository.findById(orderId)).thenReturn(Optional.of(order));
+        when(authenticatedUser.requireId()).thenReturn(UUID.randomUUID());
+
+        assertThrows(NotFoundException.class, () -> orderService.getOrder(orderId));
+    }
+
+    @Test
+    void shouldLetAnAdministratorReadAnyOrder() {
+        UUID orderId = UUID.randomUUID();
+        when(orderRepository.findById(orderId)).thenReturn(Optional.of(orderAt(OrderStatus.PENDING)));
+        when(authenticatedUser.isAdmin()).thenReturn(true);
+
+        assertNotNull(orderService.getOrder(orderId));
+    }
+
+    @Test
+    void shouldRefuseToConfirmAnOrderOfAnotherUser() {
+        UUID orderId = UUID.randomUUID();
+        when(orderRepository.findById(orderId)).thenReturn(Optional.of(orderAt(OrderStatus.PENDING)));
+        when(authenticatedUser.requireId()).thenReturn(UUID.randomUUID());
+
+        assertThrows(NotFoundException.class, () -> orderService.confirmOrder(orderId));
+
+        verify(orderRepository, never()).save(any());
+    }
+
+    @Test
+    void shouldListOnlyTheOrdersOfTheCurrentUser() {
+        Pageable pageable = PageRequest.of(0, 20);
+        when(orderRepository.findByUserId(OWNER_ID, pageable))
+                .thenReturn(new PageImpl<>(List.of(orderAt(OrderStatus.PENDING)), pageable, 1));
+
+        orderService.getAllOrders(pageable);
+
+        verify(orderRepository).findByUserId(OWNER_ID, pageable);
+        verify(orderRepository, never()).findAll(any(Pageable.class));
+    }
+
+    @Test
+    void shouldListEveryOrderForAnAdministrator() {
+        Pageable pageable = PageRequest.of(0, 20);
+        when(authenticatedUser.isAdmin()).thenReturn(true);
+        when(orderRepository.findAll(pageable))
+                .thenReturn(new PageImpl<>(List.of(), pageable, 0));
+
+        orderService.getAllOrders(pageable);
+
+        verify(orderRepository).findAll(pageable);
+        verify(orderRepository, never()).findByUserId(any(), any());
+    }
 
     private ProductResponse catalogProduct(UUID id, String name, String price) {
         return new ProductResponse(
@@ -55,6 +125,7 @@ public class OrderServiceTest {
 
     private Order orderAt(OrderStatus status) {
         Order order = new Order(
+                OWNER_ID,
                 List.of(
                         new OrderItem(UUID.randomUUID(), "Teclado", new BigDecimal("100.00"), 2)
                 )

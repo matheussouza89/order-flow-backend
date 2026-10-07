@@ -26,12 +26,23 @@ public abstract class AbstractIntegrationTest {
     @Autowired
     private TokenService tokenService;
 
+    private final UUID customerId = UUID.randomUUID();
+    private final UUID administratorId = UUID.randomUUID();
+
+    protected UUID customerId() {
+        return customerId;
+    }
+
     protected String asUser() {
+        return bearer(customerId, "USER");
+    }
+
+    protected String asAnotherUser() {
         return bearer(UUID.randomUUID(), "USER");
     }
 
     protected String asAdmin() {
-        return bearer(UUID.randomUUID(), "ADMIN");
+        return bearer(administratorId, "ADMIN");
     }
 
     protected String bearer(UUID userId, String role) {

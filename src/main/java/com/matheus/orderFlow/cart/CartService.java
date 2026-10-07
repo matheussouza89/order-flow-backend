@@ -8,6 +8,7 @@ import com.matheus.orderFlow.product.ProductResponse;
 import com.matheus.orderFlow.product.ProductService;
 import com.matheus.orderFlow.shared.exception.DomainValidationException;
 import com.matheus.orderFlow.shared.exception.NotFoundException;
+import com.matheus.orderFlow.shared.security.AuthenticatedUser;
 import com.matheus.orderFlow.shared.exception.UnavailableProductException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -27,12 +28,14 @@ public class CartService {
     private final CartRepository cartRepository;
     private final ProductService productService;
     private final OrderService orderService;
+    private final AuthenticatedUser authenticatedUser;
 
-    public CartResponse getCart(String cartId) {
-        return toResponse(findOrThrow(cartId));
+    public CartResponse getCart() {
+        return toResponse(findOrThrow(currentCartId()));
     }
 
-    public CartResponse addItem(String cartId, CartItemDto dto) {
+    public CartResponse addItem(CartItemDto dto) {
+        String cartId = currentCartId();
         Cart cart = findOrCreate(cartId);
 
         productService.getProduct(dto.productId());
@@ -44,7 +47,8 @@ public class CartService {
         return toResponse(cartRepository.save(cart));
     }
 
-    public CartResponse setItemQuantity(String cartId, UUID productId, int quantity) {
+    public CartResponse setItemQuantity(UUID productId, int quantity) {
+        String cartId = currentCartId();
         Cart cart = findOrThrow(cartId);
 
         if (quantity > 0) {
@@ -59,7 +63,8 @@ public class CartService {
         return toResponse(cartRepository.save(cart));
     }
 
-    public CartResponse removeItem(String cartId, UUID productId) {
+    public CartResponse removeItem(UUID productId) {
+        String cartId = currentCartId();
         Cart cart = findOrThrow(cartId);
 
         cart.removeItem(productId);
@@ -69,7 +74,8 @@ public class CartService {
         return toResponse(cartRepository.save(cart));
     }
 
-    public OrderResponse checkout(String cartId) {
+    public OrderResponse checkout() {
+        String cartId = currentCartId();
         Cart cart = findOrThrow(cartId);
 
         if (cart.isEmpty()) {
@@ -109,6 +115,10 @@ public class CartService {
 
         throw new UnavailableProductException(
                 "Cart contains products that are no longer available: " + ids);
+    }
+
+    private String currentCartId() {
+        return authenticatedUser.requireId().toString();
     }
 
     private Cart findOrThrow(String cartId) {

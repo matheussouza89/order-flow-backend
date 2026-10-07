@@ -27,6 +27,9 @@ class Order {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
+    @Column(name = "user_id", nullable = false, updatable = false)
+    private UUID userId;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = STATUS_MAX_LENGTH)
     private OrderStatus status;
@@ -49,9 +52,10 @@ class Order {
     protected Order() {
     }
 
-    Order(List<OrderItem> items) {
-        validate(items);
+    Order(UUID userId, List<OrderItem> items) {
+        validate(userId, items);
 
+        this.userId = userId;
         this.status = OrderStatus.PENDING;
         items.forEach(this::addItem);
         recalculateTotal();
@@ -61,10 +65,18 @@ class Order {
         return Collections.unmodifiableList(items);
     }
 
-    private void validate(List<OrderItem> items) {
+    private void validate(UUID userId, List<OrderItem> items) {
+        if (userId == null) {
+            throw new DomainValidationException("userId", "Order must belong to a user");
+        }
+
         if (items == null || items.isEmpty()) {
             throw new DomainValidationException("items", "Order must have at least one item");
         }
+    }
+
+    boolean belongsTo(UUID candidate) {
+        return userId.equals(candidate);
     }
 
     private void addItem(OrderItem item) {

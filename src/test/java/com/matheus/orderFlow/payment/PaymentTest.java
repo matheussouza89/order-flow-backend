@@ -17,7 +17,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class PaymentTest {
 
     private Payment pendingPayment() {
-        return new Payment(UUID.randomUUID(), new BigDecimal("100.00"), "key-1");
+        return new Payment(UUID.randomUUID(), UUID.randomUUID(), new BigDecimal("100.00"), "key-1");
     }
 
     private Payment paymentAt(PaymentStatus status) {
@@ -107,25 +107,25 @@ class PaymentTest {
     @Test
     void shouldRejectNullOrderId() {
         assertThrows(DomainValidationException.class,
-                () -> new Payment(null, new BigDecimal("100.00"), "key-1"));
+                () -> new Payment(null, UUID.randomUUID(), new BigDecimal("100.00"), "key-1"));
     }
 
     @Test
     void shouldRejectNullAmount() {
         assertThrows(DomainValidationException.class,
-                () -> new Payment(UUID.randomUUID(), null, "key-1"));
+                () -> new Payment(UUID.randomUUID(), UUID.randomUUID(), null, "key-1"));
     }
 
     @ParameterizedTest
     @ValueSource(strings = {"0", "-1", "-100.00"})
     void shouldRejectAmountThatIsNotPositive(String amount) {
         assertThrows(DomainValidationException.class,
-                () -> new Payment(UUID.randomUUID(), new BigDecimal(amount), "key-1"));
+                () -> new Payment(UUID.randomUUID(), UUID.randomUUID(), new BigDecimal(amount), "key-1"));
     }
 
     @Test
     void shouldRejectNullIdempotencyKey() {
         assertThrows(DomainValidationException.class,
-                () -> new Payment(UUID.randomUUID(), new BigDecimal("100.00"), null));
+                () -> new Payment(UUID.randomUUID(), UUID.randomUUID(), new BigDecimal("100.00"), null));
     }
 }

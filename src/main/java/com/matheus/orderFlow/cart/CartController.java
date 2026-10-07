@@ -15,24 +15,24 @@ import java.util.UUID;
 
 @Tag(
         name = "Carts",
-        description = "Shopping cart endpoints"
+        description = "Shopping cart endpoints. The cart belongs to the authenticated caller."
 )
 @RestController
-@RequestMapping("/carts")
+@RequestMapping("/cart")
 @RequiredArgsConstructor
 class CartController {
     private final CartService cartService;
 
     @Operation(summary = "Get cart",
-            description = "Returns the cart with the current catalog price of each item.")
+            description = "Returns the caller's cart, with the current catalog price of each item.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Cart found"),
-            @ApiResponse(responseCode = "404", description = "Cart not found",
+            @ApiResponse(responseCode = "404", description = "The caller has no cart",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
-    @GetMapping("/{cartId}")
-    public CartResponse getCart(@PathVariable String cartId) {
-        return cartService.getCart(cartId);
+    @GetMapping
+    public CartResponse getCart() {
+        return cartService.getCart();
     }
 
     @Operation(summary = "Add item to cart",
@@ -44,9 +44,9 @@ class CartController {
             @ApiResponse(responseCode = "404", description = "Product not found",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
-    @PostMapping("/{cartId}/items")
-    public CartResponse addItem(@PathVariable String cartId, @RequestBody CartItemDto item) {
-        return cartService.addItem(cartId, item);
+    @PostMapping("/items")
+    public CartResponse addItem(@RequestBody CartItemDto item) {
+        return cartService.addItem(item);
     }
 
     @Operation(summary = "Set item quantity",
@@ -55,25 +55,24 @@ class CartController {
             @ApiResponse(responseCode = "200", description = "Quantity updated"),
             @ApiResponse(responseCode = "400", description = "Negative quantity",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "404", description = "Cart or product not found",
+            @ApiResponse(responseCode = "404", description = "No cart, or product not found",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
-    @PutMapping("/{cartId}/items/{productId}")
-    public CartResponse setItemQuantity(@PathVariable String cartId,
-                                        @PathVariable UUID productId,
+    @PutMapping("/items/{productId}")
+    public CartResponse setItemQuantity(@PathVariable UUID productId,
                                         @RequestBody QuantityDto quantity) {
-        return cartService.setItemQuantity(cartId, productId, quantity.quantity());
+        return cartService.setItemQuantity(productId, quantity.quantity());
     }
 
     @Operation(summary = "Remove item from cart")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Item removed"),
-            @ApiResponse(responseCode = "404", description = "Cart not found",
+            @ApiResponse(responseCode = "404", description = "The caller has no cart",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
-    @DeleteMapping("/{cartId}/items/{productId}")
-    public CartResponse removeItem(@PathVariable String cartId, @PathVariable UUID productId) {
-        return cartService.removeItem(cartId, productId);
+    @DeleteMapping("/items/{productId}")
+    public CartResponse removeItem(@PathVariable UUID productId) {
+        return cartService.removeItem(productId);
     }
 
     @Operation(summary = "Checkout",
@@ -82,14 +81,14 @@ class CartController {
             @ApiResponse(responseCode = "200", description = "Order created"),
             @ApiResponse(responseCode = "400", description = "Cart is empty",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "404", description = "Cart not found",
+            @ApiResponse(responseCode = "404", description = "The caller has no cart",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "409",
                     description = "Cart contains a product that is no longer available",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
-    @PostMapping("/{cartId}/checkout")
-    public OrderResponse checkout(@PathVariable String cartId) {
-        return cartService.checkout(cartId);
+    @PostMapping("/checkout")
+    public OrderResponse checkout() {
+        return cartService.checkout();
     }
 }

@@ -30,6 +30,9 @@ class Payment {
     @Column(nullable = false)
     private UUID orderId;
 
+    @Column(name = "user_id", nullable = false, updatable = false)
+    private UUID userId;
+
     @Column(nullable = false, precision = 12, scale = 2)
     private BigDecimal amount;
 
@@ -56,11 +59,16 @@ class Payment {
 
     private void validate(
             UUID orderId,
+            UUID userId,
             BigDecimal amount,
             String idempotencyKey
     ) {
         if (orderId == null) {
             throw new DomainValidationException("orderId", "Order ID cannot be null");
+        }
+
+        if (userId == null) {
+            throw new DomainValidationException("userId", "Payment must belong to a user");
         }
 
         if (amount == null || amount.signum() <= 0) {
@@ -75,13 +83,18 @@ class Payment {
     protected Payment() {
     }
 
-    Payment(UUID orderId, BigDecimal amount, String idempotencyKey) {
-        validate(orderId, amount, idempotencyKey);
+    Payment(UUID orderId, UUID userId, BigDecimal amount, String idempotencyKey) {
+        validate(orderId, userId, amount, idempotencyKey);
 
         this.orderId = orderId;
+        this.userId = userId;
         this.amount = amount;
         this.status = PaymentStatus.PENDING;
         this.idempotencyKey = idempotencyKey;
+    }
+
+    boolean belongsTo(UUID candidate) {
+        return userId.equals(candidate);
     }
 
     void approve(String gatewayReference) {

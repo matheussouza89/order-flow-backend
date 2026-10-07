@@ -6,6 +6,7 @@ import java.util.UUID;
 
 public record OrderConfirmedEvent(
         UUID orderId,
+        UUID userId,
         BigDecimal total,
         Instant occurredAt
 ) {

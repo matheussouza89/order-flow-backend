@@ -3,6 +3,7 @@ package com.matheus.orderFlow.integration;
 import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -13,8 +14,6 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 class CartIT extends AbstractIntegrationTest {
-
-    private static final String CART_ID = "user-1";
 
     @Autowired
     private MockMvc mockMvc;
@@ -38,7 +37,7 @@ class CartIT extends AbstractIntegrationTest {
     }
 
     private void addItem(String productId, int quantity) throws Exception {
-        mockMvc.perform(post("/carts/{cartId}/items", CART_ID)
+        mockMvc.perform(post("/cart/items")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 { "productId": "%s", "quantity": %d }
@@ -50,15 +49,14 @@ class CartIT extends AbstractIntegrationTest {
     void shouldCreateCartOnFirstItem() throws Exception {
         String productId = createProduct("Teclado", "100.00");
 
-        mockMvc.perform(get("/carts/{cartId}", CART_ID))
+        mockMvc.perform(get("/cart"))
                 .andExpect(status().isNotFound());
 
         addItem(productId, 2);
 
-        mockMvc.perform(get("/carts/{cartId}", CART_ID))
+        mockMvc.perform(get("/cart"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.id").value(CART_ID))
-                .andExpect(jsonPath("$.items.length()").value(1))
+                                .andExpect(jsonPath("$.items.length()").value(1))
                 .andExpect(jsonPath("$.items[0].productName").value("Teclado"))
                 .andExpect(jsonPath("$.items[0].price").value(100.00))
                 .andExpect(jsonPath("$.items[0].quantity").value(2))
@@ -70,7 +68,7 @@ class CartIT extends AbstractIntegrationTest {
         String productId = createProduct("Monitor", "800.00");
         addItem(productId, 1);
 
-        mockMvc.perform(get("/carts/{cartId}", CART_ID))
+        mockMvc.perform(get("/cart"))
                 .andExpect(jsonPath("$.total").value(800.00));
 
         mockMvc.perform(put("/products/{id}", productId)
@@ -84,7 +82,7 @@ class CartIT extends AbstractIntegrationTest {
                                 """))
                 .andExpect(status().isOk());
 
-        mockMvc.perform(get("/carts/{cartId}", CART_ID))
+        mockMvc.perform(get("/cart"))
                 .andExpect(jsonPath("$.items[0].price").value(1200.00))
                 .andExpect(jsonPath("$.total").value(1200.00));
     }
@@ -96,7 +94,7 @@ class CartIT extends AbstractIntegrationTest {
         addItem(productId, 2);
         addItem(productId, 3);
 
-        mockMvc.perform(get("/carts/{cartId}", CART_ID))
+        mockMvc.perform(get("/cart"))
                 .andExpect(jsonPath("$.items.length()").value(1))
                 .andExpect(jsonPath("$.items[0].quantity").value(5))
                 .andExpect(jsonPath("$.total").value(250.00));
@@ -107,14 +105,14 @@ class CartIT extends AbstractIntegrationTest {
         String productId = createProduct("Headset", "300.00");
         addItem(productId, 4);
 
-        mockMvc.perform(put("/carts/{cartId}/items/{productId}", CART_ID, productId)
+        mockMvc.perform(put("/cart/items/{productId}", productId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{ \"quantity\": 2 }"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.items[0].quantity").value(2))
                 .andExpect(jsonPath("$.total").value(600.00));
 
-        mockMvc.perform(put("/carts/{cartId}/items/{productId}", CART_ID, productId)
+        mockMvc.perform(put("/cart/items/{productId}", productId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{ \"quantity\": 0 }"))
                 .andExpect(status().isOk())
@@ -127,7 +125,7 @@ class CartIT extends AbstractIntegrationTest {
         String productId = createProduct("Webcam", "250.00");
         addItem(productId, 1);
 
-        mockMvc.perform(delete("/carts/{cartId}/items/{productId}", CART_ID, productId))
+        mockMvc.perform(delete("/cart/items/{productId}", productId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.items.length()").value(0));
     }
@@ -140,7 +138,7 @@ class CartIT extends AbstractIntegrationTest {
         addItem(keyboardId, 2);
         addItem(mouseId, 3);
 
-        String response = mockMvc.perform(post("/carts/{cartId}/checkout", CART_ID))
+        String response = mockMvc.perform(post("/cart/checkout"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("PENDING"))
                 .andExpect(jsonPath("$.items.length()").value(2))
@@ -155,7 +153,7 @@ class CartIT extends AbstractIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.total").value(350.00));
 
-        mockMvc.perform(get("/carts/{cartId}", CART_ID))
+        mockMvc.perform(get("/cart"))
                 .andExpect(status().isNotFound());
     }
 
@@ -164,7 +162,7 @@ class CartIT extends AbstractIntegrationTest {
         String productId = createProduct("Notebook", "3000.00");
         addItem(productId, 1);
 
-        String response = mockMvc.perform(post("/carts/{cartId}/checkout", CART_ID))
+        String response = mockMvc.perform(post("/cart/checkout"))
                 .andExpect(status().isOk())
                 .andReturn()
                 .getResponse()
@@ -192,10 +190,10 @@ class CartIT extends AbstractIntegrationTest {
     void shouldRejectCheckoutOfAnEmptyCart() throws Exception {
         String productId = createProduct("Cabo", "20.00");
         addItem(productId, 1);
-        mockMvc.perform(delete("/carts/{cartId}/items/{productId}", CART_ID, productId))
+        mockMvc.perform(delete("/cart/items/{productId}", productId))
                 .andExpect(status().isOk());
 
-        mockMvc.perform(post("/carts/{cartId}/checkout", CART_ID))
+        mockMvc.perform(post("/cart/checkout"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errors.items").isNotEmpty());
     }
@@ -208,14 +206,14 @@ class CartIT extends AbstractIntegrationTest {
         addItem(keptId, 1);
         addItem(removedId, 2);
 
-        mockMvc.perform(get("/carts/{cartId}", CART_ID))
+        mockMvc.perform(get("/cart"))
                 .andExpect(jsonPath("$.items.length()").value(2))
                 .andExpect(jsonPath("$.total").value(240.00));
 
         mockMvc.perform(delete("/products/{id}", removedId))
                 .andExpect(status().isNoContent());
 
-        mockMvc.perform(get("/carts/{cartId}", CART_ID))
+        mockMvc.perform(get("/cart"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.items.length()").value(1))
                 .andExpect(jsonPath("$.items[0].productName").value("Teclado"))
@@ -233,15 +231,15 @@ class CartIT extends AbstractIntegrationTest {
         mockMvc.perform(delete("/products/{id}", removedId))
                 .andExpect(status().isNoContent());
 
-        mockMvc.perform(post("/carts/{cartId}/checkout", CART_ID))
+        mockMvc.perform(post("/cart/checkout"))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.message").value(containsString(removedId)))
                 .andExpect(jsonPath("$.errors").isEmpty());
 
-        mockMvc.perform(delete("/carts/{cartId}/items/{productId}", CART_ID, removedId))
+        mockMvc.perform(delete("/cart/items/{productId}", removedId))
                 .andExpect(status().isOk());
 
-        mockMvc.perform(post("/carts/{cartId}/checkout", CART_ID))
+        mockMvc.perform(post("/cart/checkout"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.items.length()").value(1))
                 .andExpect(jsonPath("$.total").value(100.00));
@@ -262,7 +260,7 @@ class CartIT extends AbstractIntegrationTest {
         mockMvc.perform(delete("/products/{id}", secondRemovedId))
                 .andExpect(status().isNoContent());
 
-        mockMvc.perform(post("/carts/{cartId}/checkout", CART_ID))
+        mockMvc.perform(post("/cart/checkout"))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.message").value(containsString(firstRemovedId)))
                 .andExpect(jsonPath("$.message").value(containsString(secondRemovedId)));
@@ -276,22 +274,42 @@ class CartIT extends AbstractIntegrationTest {
         mockMvc.perform(delete("/products/{id}", productId))
                 .andExpect(status().isNoContent());
 
-        mockMvc.perform(post("/carts/{cartId}/checkout", CART_ID))
+        mockMvc.perform(post("/cart/checkout"))
                 .andExpect(status().isConflict());
 
-        mockMvc.perform(get("/carts/{cartId}", CART_ID))
+        mockMvc.perform(get("/cart"))
                 .andExpect(status().isOk());
     }
 
     @Test
-    void shouldReturnNotFoundForUnknownCart() throws Exception {
-        mockMvc.perform(get("/carts/{cartId}", "does-not-exist"))
+    void shouldReturnNotFoundWhenTheCallerHasNoCart() throws Exception {
+        mockMvc.perform(get("/cart"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void shouldKeepEachUserCartSeparate() throws Exception {
+        String productId = createProduct("Teclado", "100.00");
+
+        mockMvc.perform(post("/cart/items")
+                        .header(HttpHeaders.AUTHORIZATION, asUser())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                { "productId": "%s", "quantity": 2 }
+                                """.formatted(productId)))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/cart").header(HttpHeaders.AUTHORIZATION, asUser()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(1));
+
+        mockMvc.perform(get("/cart").header(HttpHeaders.AUTHORIZATION, asAnotherUser()))
                 .andExpect(status().isNotFound());
     }
 
     @Test
     void shouldReturnNotFoundWhenAddingUnknownProduct() throws Exception {
-        mockMvc.perform(post("/carts/{cartId}/items", CART_ID)
+        mockMvc.perform(post("/cart/items")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 { "productId": "%s", "quantity": 1 }

@@ -18,8 +18,8 @@ class PaymentProcessor {
     private final PaymentService paymentService;
     private final PaymentGatewayClient paymentGatewayClient;
 
-    void process(UUID orderId, BigDecimal amount) {
-        Optional<PendingCharge> pendingCharge = paymentService.registerPending(orderId, amount);
+    void process(UUID orderId, UUID userId, BigDecimal amount) {
+        Optional<PendingCharge> pendingCharge = paymentService.registerPending(orderId, userId, amount);
 
         if (pendingCharge.isEmpty()) {
             return;

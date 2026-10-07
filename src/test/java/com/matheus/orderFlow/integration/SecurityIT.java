@@ -198,6 +198,37 @@ class SecurityIT extends AbstractIntegrationTest {
     }
 
     @Test
+    void shouldHideAnotherUsersOrderInsteadOfForbiddingIt() throws Exception {
+        String orderId = pendingOrder();
+
+        mockMvc.perform(get("/orders/{id}", orderId)
+                        .header(HttpHeaders.AUTHORIZATION, asAnotherUser()))
+                .andExpect(status().isNotFound());
+
+        mockMvc.perform(post("/orders/{id}/cancel", orderId)
+                        .header(HttpHeaders.AUTHORIZATION, asAnotherUser()))
+                .andExpect(status().isNotFound());
+
+        mockMvc.perform(get("/orders/{id}", orderId)
+                        .header(HttpHeaders.AUTHORIZATION, asUser()))
+                .andExpect(jsonPath("$.status").value("PENDING"));
+    }
+
+    @Test
+    void shouldListOnlyTheOrdersOfTheCaller() throws Exception {
+        pendingOrder();
+
+        mockMvc.perform(get("/orders").header(HttpHeaders.AUTHORIZATION, asUser()))
+                .andExpect(jsonPath("$.totalElements").value(1));
+
+        mockMvc.perform(get("/orders").header(HttpHeaders.AUTHORIZATION, asAnotherUser()))
+                .andExpect(jsonPath("$.totalElements").value(0));
+
+        mockMvc.perform(get("/orders").header(HttpHeaders.AUTHORIZATION, asAdmin()))
+                .andExpect(jsonPath("$.totalElements").value(1));
+    }
+
+    @Test
     void shouldRejectAMalformedToken() throws Exception {
         mockMvc.perform(get("/orders").header(HttpHeaders.AUTHORIZATION, "Bearer nao-e-um-jwt"))
                 .andExpect(status().isUnauthorized());

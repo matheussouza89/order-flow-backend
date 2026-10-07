@@ -54,14 +54,16 @@ import org.springframework.context.annotation.Configuration;
                         hashing.
 
                         ## Cart
-                        The cart is the opposite of the order: it holds only the product and the
+                        The cart belongs to the authenticated caller: there is no cart id in the
+                        URL, and `/cart` always means *your* cart.
+
+                        It is the opposite of the order: it holds only the product and the
                         quantity, and reads name, price and total from the catalog on every
                         request. A cart left open for days shows today's price, while an order
                         keeps the price that applied when it was placed.
 
                         A cart is created by its first item — there is no endpoint to create an
-                        empty one — and is identified by a caller-supplied id. It expires after
-                        seven days without changes.
+                        empty one. It expires after seven days without changes.
 
                         Checkout is the boundary between the two: it creates the order, freezing
                         the current prices, and only then discards the cart.
@@ -138,6 +140,19 @@ import org.springframework.context.annotation.Configuration;
                         Browsing the catalog (`GET /products`), registering and logging in need
                         no token. Everything else does. Changing the catalog additionally
                         requires the `ADMIN` role.
+
+                        ## Who owns what
+                        Orders, carts and payments belong to the user who created them. A caller
+                        only ever reaches their own; an administrator reaches all of them.
+
+                        Asking for someone else's order or payment answers **404**, not 403: a
+                        403 would confirm that the identifier exists, which is enough to count
+                        the store's orders by trying identifiers.
+
+                        Order actions split by who is entitled to them. `confirm` and `cancel`
+                        are decisions of the buyer. `ship` and `deliver` record what logistics
+                        did, so they require the `ADMIN` role — otherwise a customer could mark
+                        their own order as delivered.
 
                         Two statuses that are easy to confuse:
 

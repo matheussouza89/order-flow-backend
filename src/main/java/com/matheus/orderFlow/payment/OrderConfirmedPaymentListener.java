@@ -12,6 +12,6 @@ class OrderConfirmedPaymentListener {
 
     @RabbitListener(queues = PaymentMessagingConfig.ORDER_CONFIRMED_QUEUE)
     void onOrderConfirmed(OrderConfirmedEvent event) {
-        paymentProcessor.process(event.orderId(), event.total());
+        paymentProcessor.process(event.orderId(), event.userId(), event.total());
     }
 }
