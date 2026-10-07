@@ -122,6 +122,82 @@ class SecurityIT extends AbstractIntegrationTest {
     }
 
     @Test
+    void shouldForbidACustomerFromShippingOrDeliveringTheirOwnOrder() throws Exception {
+        String orderId = confirmedOrder();
+
+        mockMvc.perform(post("/orders/{id}/ship", orderId)
+                        .header(HttpHeaders.AUTHORIZATION, asUser()))
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(post("/orders/{id}/deliver", orderId)
+                        .header(HttpHeaders.AUTHORIZATION, asUser()))
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(get("/orders/{id}", orderId)
+                        .header(HttpHeaders.AUTHORIZATION, asUser()))
+                .andExpect(jsonPath("$.status").value("CONFIRMED"));
+    }
+
+    @Test
+    void shouldAllowACustomerToConfirmAndCancelTheirOwnOrder() throws Exception {
+        String orderId = pendingOrder();
+
+        mockMvc.perform(post("/orders/{id}/confirm", orderId)
+                        .header(HttpHeaders.AUTHORIZATION, asUser()))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post("/orders/{id}/cancel", orderId)
+                        .header(HttpHeaders.AUTHORIZATION, asUser()))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void shouldAllowAnAdministratorToShipAndDeliver() throws Exception {
+        String orderId = confirmedOrder();
+
+        mockMvc.perform(post("/orders/{id}/ship", orderId)
+                        .header(HttpHeaders.AUTHORIZATION, asAdmin()))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post("/orders/{id}/deliver", orderId)
+                        .header(HttpHeaders.AUTHORIZATION, asAdmin()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("DELIVERED"));
+    }
+
+    private String pendingOrder() throws Exception {
+        String productResponse = mockMvc.perform(post("/products")
+                        .header(HttpHeaders.AUTHORIZATION, asAdmin())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(PRODUCT_JSON))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+
+        String productId = com.jayway.jsonpath.JsonPath.read(productResponse, "$.id");
+
+        String orderResponse = mockMvc.perform(post("/orders")
+                        .header(HttpHeaders.AUTHORIZATION, asUser())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                { "items": [ { "productId": "%s", "quantity": 1 } ] }
+                                """.formatted(productId)))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+
+        return com.jayway.jsonpath.JsonPath.read(orderResponse, "$.id");
+    }
+
+    private String confirmedOrder() throws Exception {
+        String orderId = pendingOrder();
+
+        mockMvc.perform(post("/orders/{id}/confirm", orderId)
+                        .header(HttpHeaders.AUTHORIZATION, asUser()))
+                .andExpect(status().isOk());
+
+        return orderId;
+    }
+
+    @Test
     void shouldRejectAMalformedToken() throws Exception {
         mockMvc.perform(get("/orders").header(HttpHeaders.AUTHORIZATION, "Bearer nao-e-um-jwt"))
                 .andExpect(status().isUnauthorized());

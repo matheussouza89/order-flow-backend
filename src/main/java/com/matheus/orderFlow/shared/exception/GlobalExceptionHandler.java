@@ -3,6 +3,7 @@ package com.matheus.orderFlow.shared.exception;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.core.PropertyReferenceException;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -105,6 +106,16 @@ public class GlobalExceptionHandler {
         ErrorResponse response = new ErrorResponse(401, exception.getMessage());
 
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
+    }
+
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<ErrorResponse> handleAccessDenied(AccessDeniedException exception) {
+        log.warn("Access denied: {}", exception.getMessage());
+
+        ErrorResponse response = new ErrorResponse(
+                403, "You do not have permission to perform this operation");
+
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response);
     }
 
     @ExceptionHandler(Exception.class)

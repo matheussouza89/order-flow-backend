@@ -15,6 +15,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
@@ -98,27 +99,37 @@ class OrderController {
         return orderService.confirmOrder(id);
     }
 
-    @Operation(summary = "Ship order", description = "Moves the order from CONFIRMED to SHIPPED.")
+    @Operation(summary = "Ship order",
+            description = "Moves the order from CONFIRMED to SHIPPED. Logistics operation, "
+                    + "restricted to administrators.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Order shipped"),
+            @ApiResponse(responseCode = "403", description = "Only administrators can do this",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "404", description = "Order not found",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "409", description = "Order is not CONFIRMED",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
+    @PreAuthorize("hasRole('ADMIN')")
     @PostMapping("/{id}/ship")
     public OrderResponse shipOrder(@PathVariable UUID id) {
         return orderService.shipOrder(id);
     }
 
-    @Operation(summary = "Deliver order", description = "Moves the order from SHIPPED to DELIVERED.")
+    @Operation(summary = "Deliver order",
+            description = "Moves the order from SHIPPED to DELIVERED. Logistics operation, "
+                    + "restricted to administrators.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Order delivered"),
+            @ApiResponse(responseCode = "403", description = "Only administrators can do this",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "404", description = "Order not found",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "409", description = "Order is not SHIPPED",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
+    @PreAuthorize("hasRole('ADMIN')")
     @PostMapping("/{id}/deliver")
     public OrderResponse deliverOrder(@PathVariable UUID id) {
         return orderService.deliverOrder(id);

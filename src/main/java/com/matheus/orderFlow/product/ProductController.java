@@ -16,6 +16,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
@@ -67,6 +68,7 @@ class ProductController {
             @ApiResponse(responseCode = "400", description = "Invalid product data",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
+    @PreAuthorize("hasRole('ADMIN')")
     @PostMapping
     public ResponseEntity<ProductResponse> createProduct(@Valid @RequestBody ProductDto product) {
         ProductResponse created = productService.createProduct(product);
@@ -87,6 +89,7 @@ class ProductController {
             @ApiResponse(responseCode = "404", description = "Product not found",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
+    @PreAuthorize("hasRole('ADMIN')")
     @PutMapping("/{id}")
     public ProductResponse updateProduct(@PathVariable UUID id, @Valid @RequestBody ProductDto product) {
         return productService.updateProduct(id, product);
@@ -98,6 +101,7 @@ class ProductController {
             @ApiResponse(responseCode = "404", description = "Product not found",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
+    @PreAuthorize("hasRole('ADMIN')")
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void deleteProduct(@PathVariable UUID id) {
