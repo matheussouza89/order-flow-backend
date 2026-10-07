@@ -78,7 +78,7 @@ alteração:
 ./mvnw test
 ```
 
-Roda os **164 testes unitários** em poucos segundos, sem Docker.
+Roda os **193 testes unitários** em poucos segundos, sem Docker.
 
 ```bash
 ./mvnw verify
@@ -683,7 +683,7 @@ Nome, preço e total vêm do catálogo e do domínio — nunca do cliente.
 - [x] Cadastro de usuários com senha em hash BCrypt e role definida pelo sistema
 - [x] Login com JWT, rotas protegidas por autenticação e papel
 - [x] Recursos vinculados ao dono: carrinho, pedidos e pagamentos
-- [x] 254 testes, separados por velocidade (unitários e integração)
+- [x] 283 testes, separados por velocidade (unitários e integração)
 - [x] Pipeline de CI rodando `mvn verify` a cada push
 - [x] Imagem da aplicação e stack completa em Docker, com conexões por variável de ambiente
 - [x] Documentação OpenAPI

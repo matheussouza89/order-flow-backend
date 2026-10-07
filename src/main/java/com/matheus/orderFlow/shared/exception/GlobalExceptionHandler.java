@@ -10,6 +10,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -106,6 +107,23 @@ public class GlobalExceptionHandler {
         ErrorResponse response = new ErrorResponse(401, exception.getMessage());
 
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
+    }
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ErrorResponse> handleTypeMismatch(
+            MethodArgumentTypeMismatchException exception) {
+
+        String message = "Parameter '" + exception.getName() + "' has an invalid value";
+
+        log.warn("Invalid value for parameter '{}'", exception.getName());
+
+        Map<String, String> errors = new LinkedHashMap<>();
+        errors.put(exception.getName(), message);
+
+        ErrorResponse response = new ErrorResponse(
+                400, exception.getName() + ": " + message, errors);
+
+        return ResponseEntity.badRequest().body(response);
     }
 
     @ExceptionHandler(AccessDeniedException.class)
