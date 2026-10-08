@@ -45,10 +45,16 @@ primeiro compila com Maven, o segundo leva apenas o jar para uma imagem com
 JRE. As conexões vêm de variáveis de ambiente, com o ambiente local como
 padrão — por isso a mesma imagem serve para qualquer ambiente.
 
-⚠️ Uma dessas variáveis não deve usar o padrão fora da máquina local:
-`JWT_SECRET` assina os tokens, e conhecê-la permite forjar um token de qualquer
-usuário, inclusive administrador. São no mínimo 32 caracteres; abaixo disso a
-aplicação se recusa a subir.
+⚠️ Três variáveis não devem usar o padrão fora da máquina local:
+
+| Variável | Por quê |
+|---|---|
+| `JWT_SECRET` | assina os tokens; quem a conhece forja um token de qualquer usuário, inclusive administrador. Mínimo de 32 caracteres, senão a aplicação não sobe |
+| `ADMIN_EMAIL` | identifica o administrador criado na primeira subida |
+| `ADMIN_PASSWORD` | a senha dele; com o padrão, o log avisa na subida |
+
+O administrador é criado automaticamente quando não existe nenhum, então subir
+o projeto já dá acesso às rotas de `ADMIN`.
 
 Para desenvolver com a aplicação fora do container (Java 21 necessário), suba
 só a infraestrutura e rode pelo Maven:
@@ -78,13 +84,13 @@ alteração:
 ./mvnw test
 ```
 
-Roda os **193 testes unitários** em poucos segundos, sem Docker.
+Roda os **204 testes unitários** em poucos segundos, sem Docker.
 
 ```bash
 ./mvnw verify
 ```
 
-Roda os unitários **mais os 90 de integração**, que sobem MySQL, Redis e
+Roda os unitários **mais os 92 de integração**, que sobem MySQL, Redis e
 RabbitMQ reais via Testcontainers, e um WireMock fazendo as vezes do gateway de
 pagamento.
 
@@ -414,6 +420,44 @@ qual algoritmo usar, e aceita um token forjado que declara `"alg": "none"`. É
 uma falha que passa em todos os testes de caminho feliz. O algoritmo aqui é
 fixado na configuração e o que o token afirma é ignorado.
 
+### O primeiro administrador nasce fora do cadastro
+
+Promover alguém a `ADMIN` exige ser `ADMIN` — e no banco vazio não existe
+nenhum. Alguém precisa nascer fora do fluxo normal.
+
+A aplicação resolve isso na subida: se não houver nenhum administrador, cria um
+com as credenciais vindas de variável de ambiente. Havendo, não faz nada —
+reiniciar não multiplica administradores.
+
+A alternativa óbvia seria um `INSERT` numa migration, e ela tem dois problemas.
+O menor é que migration roda **uma vez**: se o administrador for apagado, ela
+não recria, porque o Flyway já a marcou como aplicada — e "criar se não houver"
+é verificação de execução, não de versionamento. O maior é a credencial: o hash
+no arquivo não protege nada se a senha em claro precisa estar no README ou na
+cabeça de alguém para servir.
+
+Se o email configurado já pertencer a um usuário comum, nada acontece: promover
+alguém por configuração seria escalada de privilégio silenciosa. E sem
+configuração a aplicação sobe assim mesmo, apenas avisando — falhar quebraria
+quem só quer rodar na própria máquina.
+
+### Virar administrador tem um nome, não um parâmetro
+
+O construtor de `User` fixa o papel em `USER`. Criar um administrador exige uma
+fábrica nomeada:
+
+```java
+static User administrator(String name, String email, String passwordHash)
+```
+
+Aceitar a role como parâmetro reabriria o buraco pelo lado de dentro: qualquer
+caminho futuro — um importador, um seeder, um endpoint novo — poderia criar um
+administrador por engano, ou repassando algo que veio do cliente.
+
+Com a fábrica, só quem escreve o nome dela faz isso, e um `grep` encontra todos
+os lugares. É a mesma ideia de `confirm()` em vez de `setStatus()`: a operação
+tem nome, e o nome é auditável.
+
 ### Recurso alheio responde 404, não 403
 
 Pedido, carrinho e pagamento pertencem a quem os criou. Pedir o de outro
@@ -683,7 +727,8 @@ Nome, preço e total vêm do catálogo e do domínio — nunca do cliente.
 - [x] Cadastro de usuários com senha em hash BCrypt e role definida pelo sistema
 - [x] Login com JWT, rotas protegidas por autenticação e papel
 - [x] Recursos vinculados ao dono: carrinho, pedidos e pagamentos
-- [x] 283 testes, separados por velocidade (unitários e integração)
+- [x] Primeiro administrador criado na subida, por variável de ambiente
+- [x] 296 testes, separados por velocidade (unitários e integração)
 - [x] Pipeline de CI rodando `mvn verify` a cada push
 - [x] Imagem da aplicação e stack completa em Docker, com conexões por variável de ambiente
 - [x] Documentação OpenAPI

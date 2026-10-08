@@ -3,6 +3,7 @@ package com.matheus.orderFlow.integration;
 import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.ApplicationRunner;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
@@ -21,6 +22,9 @@ class UserIT extends AbstractIntegrationTest {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    private ApplicationRunner adminBootstrap;
 
     private String registerJson(String name, String email, String password) {
         return """
@@ -333,6 +337,44 @@ class UserIT extends AbstractIntegrationTest {
                                 { "email": "matheus@example.com", "password": "senhaSegura1" }
                                 """))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void shouldLetTheBootstrappedAdministratorLogInAndReachAdminRoutes() throws Exception {
+        jdbcTemplate.execute("DELETE FROM users");
+        adminBootstrap.run(null);
+
+        String response = login("admin@orderflow.local", "change-me-in-production");
+
+        String token = JsonPath.read(response, "$.token");
+        String payload = new String(Base64.getUrlDecoder().decode(token.split("\\.")[1]));
+
+        assertTrue(payload.contains("ADMIN"));
+
+        mockMvc.perform(post("/products")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                    "name": "Teclado",
+                                    "description": "Mecanico",
+                                    "price": 100.00
+                                }
+                                """))
+                .andExpect(status().isCreated());
+    }
+
+    @Test
+    void shouldNotCreateASecondAdministrator() throws Exception {
+        jdbcTemplate.execute("DELETE FROM users");
+
+        adminBootstrap.run(null);
+        adminBootstrap.run(null);
+
+        Integer total = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM users WHERE role = 'ADMIN'", Integer.class);
+
+        assertEquals(1, total);
     }
 
     @Test

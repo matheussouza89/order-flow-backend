@@ -31,6 +31,10 @@ spring:
 
 orderflow:
   security:
+    admin:
+      name: ${ADMIN_NAME:Administrator}
+      email: ${ADMIN_EMAIL:admin@orderflow.local}
+      password: ${ADMIN_PASSWORD:change-me-in-production}
     jwt:
       secret: ${JWT_SECRET:local-development-secret-change-in-production}
       expiration: ${JWT_EXPIRATION:1h}

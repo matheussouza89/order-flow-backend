@@ -106,6 +106,13 @@ class User {
         this.role = UserRole.USER;
     }
 
+    static User administrator(String name, String email, String passwordHash) {
+        User administrator = new User(name, email, passwordHash);
+        administrator.role = UserRole.ADMIN;
+
+        return administrator;
+    }
+
     void changeName(String name) {
         validateName(name);
         this.name = name;

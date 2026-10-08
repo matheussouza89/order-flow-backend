@@ -11,6 +11,9 @@ services:
       SPRING_DATA_REDIS_HOST: redis
       SPRING_RABBITMQ_HOST: rabbitmq
       PAYMENT_GATEWAY_URL: http://wiremock:8080
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@orderflow.local}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-change-me-in-production}
+      JWT_SECRET: ${JWT_SECRET:-local-development-secret-change-in-production}
     ports:
       - "8080:8080"
     depends_on:
