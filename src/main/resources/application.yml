@@ -38,6 +38,8 @@ orderflow:
     jwt:
       secret: ${JWT_SECRET:local-development-secret-change-in-production}
       expiration: ${JWT_EXPIRATION:1h}
+  outbox:
+    poll-interval: ${OUTBOX_POLL_INTERVAL:1000}
   payment:
     gateway:
       url: ${PAYMENT_GATEWAY_URL:http://localhost:8090}

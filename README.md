@@ -84,13 +84,13 @@ alteração:
 ./mvnw test
 ```
 
-Roda os **204 testes unitários** em poucos segundos, sem Docker.
+Roda os **215 testes unitários** em poucos segundos, sem Docker.
 
 ```bash
 ./mvnw verify
 ```
 
-Roda os unitários **mais os 92 de integração**, que sobem MySQL, Redis e
+Roda os unitários **mais os 98 de integração**, que sobem MySQL, Redis e
 RabbitMQ reais via Testcontainers, e um WireMock fazendo as vezes do gateway de
 pagamento.
 
@@ -113,6 +113,7 @@ com.matheus.orderFlow/
 └── shared/
     ├── config/       configuração da aplicação
     ├── messaging/    exchange e conversor compartilhados
+    ├── outbox/       evento gravado em transação e publicado pelo agendador
     ├── web/          PageResponse, envelope das listagens
     ├── security/     cadeia de filtros, emissão do token e hash de senha
     └── exception/    exceções e tratamento global
@@ -305,9 +306,8 @@ Confirmar um pedido publica um evento; o pagamento é criado ao consumi-lo. Duas
 consequências: a confirmação responde de imediato, sem esperar o gateway, e o
 gateway fora do ar não impede o pedido de ser confirmado.
 
-O evento é publicado com `@TransactionalEventListener` em `AFTER_COMMIT`.
-Mensagem não tem rollback: publicar dentro da transação faria o consumidor
-reagir a uma confirmação que um erro posterior desfez.
+O evento não é enviado durante a requisição: ele é gravado junto com o pedido e
+publicado depois, pelo mecanismo descrito [logo abaixo](#o-evento-é-gravado-não-publicado).
 
 O RabbitMQ entrega **pelo menos uma vez**, então mensagem repetida é
 comportamento normal, não anomalia. A chave de idempotência é derivada do
@@ -317,6 +317,44 @@ o trabalho e a constraint única protege contra entregas simultâneas.
 Cada consumidor declara a própria fila. A configuração compartilhada tem apenas
 a exchange e o conversor, então acrescentar um consumidor não mexe no que já
 existe — e quem publica continua sem saber quem escuta.
+
+### O evento é gravado, não publicado
+
+Publicar em `AFTER_COMMIT` evita o pior erro — um consumidor reagindo a algo que
+um rollback desfez. Mas sobra uma janela: entre o commit e o envio, se a
+aplicação morrer ou o RabbitMQ estiver fora, o pedido fica **CONFIRMED sem
+cobrança alguma**. E em silêncio, porque ninguém falhou.
+
+A raiz é que são dois sistemas e não existe transação que cubra os dois. Mudar a
+ordem só troca qual lado fica inconsistente.
+
+A saída é não publicar nada durante a requisição. O evento vira uma linha numa
+tabela, gravada **na mesma transação do pedido**:
+
+```
+[transação]   status = CONFIRMED
+              INSERT INTO outbox_messages
+              commit ✓          ← um banco só, atômico de verdade
+
+[agendador]   lê pendentes → publica → marca como publicada
+```
+
+Com RabbitMQ fora, a linha espera e sai quando ele voltar. Isso inverte uma
+decisão anterior: o listener do evento passou de `@TransactionalEventListener`
+em `AFTER_COMMIT` para `@EventListener` comum, porque agora queremos que ele
+rode **dentro** da transação. A gravação no mesmo banco resolve o que a ordem de
+execução só contornava.
+
+O preço é entrega repetida: se o envio funcionar e a marcação falhar, a mensagem
+sai duas vezes. O consumidor já era idempotente — a chave deriva do pedido —, o
+que é pré-requisito para adotar o padrão, não detalhe.
+
+A mensagem guarda o JSON já serializado e o nome da classe, não o objeto. Assim
+o pacote do outbox não conhece nenhum evento concreto, e a mensagem sai com o
+mesmo formato de antes: o consumidor não soube da mudança.
+
+A busca das pendentes usa `SKIP LOCKED`. Com mais de uma instância, cada
+agendador pega um lote diferente em vez de disputarem as mesmas linhas.
 
 ### Chamada ao gateway fora da transação
 
@@ -728,7 +766,8 @@ Nome, preço e total vêm do catálogo e do domínio — nunca do cliente.
 - [x] Login com JWT, rotas protegidas por autenticação e papel
 - [x] Recursos vinculados ao dono: carrinho, pedidos e pagamentos
 - [x] Primeiro administrador criado na subida, por variável de ambiente
-- [x] 296 testes, separados por velocidade (unitários e integração)
+- [x] Outbox transacional: o evento commita junto com o pedido
+- [x] 313 testes, separados por velocidade (unitários e integração)
 - [x] Pipeline de CI rodando `mvn verify` a cada push
 - [x] Imagem da aplicação e stack completa em Docker, com conexões por variável de ambiente
 - [x] Documentação OpenAPI

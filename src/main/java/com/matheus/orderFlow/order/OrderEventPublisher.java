@@ -1,19 +1,18 @@
 package com.matheus.orderFlow.order;
 
 import com.matheus.orderFlow.shared.messaging.RabbitMqConfig;
+import com.matheus.orderFlow.shared.outbox.OutboxWriter;
 import lombok.RequiredArgsConstructor;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.event.TransactionPhase;
-import org.springframework.transaction.event.TransactionalEventListener;
 
 @Component
 @RequiredArgsConstructor
 class OrderEventPublisher {
-    private final RabbitTemplate rabbitTemplate;
+    private final OutboxWriter outboxWriter;
 
-    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    @EventListener
     void onOrderConfirmed(OrderConfirmedEvent event) {
-        rabbitTemplate.convertAndSend(RabbitMqConfig.EXCHANGE, RabbitMqConfig.ORDER_CONFIRMED_KEY, event);
+        outboxWriter.record(RabbitMqConfig.ORDER_CONFIRMED_KEY, event);
     }
 }
