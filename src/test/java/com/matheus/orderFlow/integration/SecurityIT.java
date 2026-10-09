@@ -229,6 +229,75 @@ class SecurityIT extends AbstractIntegrationTest {
     }
 
     @Test
+    void shouldForbidTouchingAnotherUsersAccount() throws Exception {
+        String victimId = register("vitima@example.com", "senhaDaVitima1");
+
+        mockMvc.perform(get("/users/{id}", victimId)
+                        .header(HttpHeaders.AUTHORIZATION, asUser()))
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(put("/users/{id}/password", victimId)
+                        .header(HttpHeaders.AUTHORIZATION, asUser())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{ \"password\": \"senhaDoAtacante1\" }"))
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(put("/users/{id}/email", victimId)
+                        .header(HttpHeaders.AUTHORIZATION, asUser())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{ \"email\": \"atacante@example.com\" }"))
+                .andExpect(status().isForbidden());
+
+        login("vitima@example.com", "senhaDaVitima1");
+    }
+
+    @Test
+    void shouldLetAUserChangeTheirOwnAccount() throws Exception {
+        String ownId = register("dono@example.com", "senhaDoDono1");
+
+        mockMvc.perform(get("/users/{id}", ownId)
+                        .header(HttpHeaders.AUTHORIZATION, bearer(UUID.fromString(ownId), "USER")))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(put("/users/{id}/name", ownId)
+                        .header(HttpHeaders.AUTHORIZATION, bearer(UUID.fromString(ownId), "USER"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{ \"name\": \"Nome Novo\" }"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("Nome Novo"));
+    }
+
+    @Test
+    void shouldLetAnAdministratorReachAnyAccount() throws Exception {
+        String victimId = register("outro@example.com", "senhaDoOutro1");
+
+        mockMvc.perform(get("/users/{id}", victimId)
+                        .header(HttpHeaders.AUTHORIZATION, asAdmin()))
+                .andExpect(status().isOk());
+    }
+
+    private String register(String email, String password) throws Exception {
+        String response = mockMvc.perform(post("/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                { "name": "Fulano", "email": "%s", "password": "%s" }
+                                """.formatted(email, password)))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+
+        return com.jayway.jsonpath.JsonPath.read(response, "$.id");
+    }
+
+    private void login(String email, String password) throws Exception {
+        mockMvc.perform(post("/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                { "email": "%s", "password": "%s" }
+                                """.formatted(email, password)))
+                .andExpect(status().isOk());
+    }
+
+    @Test
     void shouldRejectAMalformedToken() throws Exception {
         mockMvc.perform(get("/orders").header(HttpHeaders.AUTHORIZATION, "Bearer nao-e-um-jwt"))
                 .andExpect(status().isUnauthorized());

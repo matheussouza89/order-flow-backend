@@ -149,6 +149,11 @@ import org.springframework.context.annotation.Configuration;
                         403 would confirm that the identifier exists, which is enough to count
                         the store's orders by trying identifiers.
 
+                        An account is the exception: `/users/{id}` answers **403**. The caller
+                        already knows that identifier — it comes from the `Location` of their own
+                        registration and is the subject of their own token — so there is no
+                        existence left to hide.
+
                         Order actions split by who is entitled to them. `confirm` and `cancel`
                         are decisions of the buyer. `ship` and `deliver` record what logistics
                         did, so they require the `ADMIN` role — otherwise a customer could mark

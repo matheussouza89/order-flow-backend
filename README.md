@@ -90,7 +90,7 @@ Roda os **215 testes unitários** em poucos segundos, sem Docker.
 ./mvnw verify
 ```
 
-Roda os unitários **mais os 98 de integração**, que sobem MySQL, Redis e
+Roda os unitários **mais os 101 de integração**, que sobem MySQL, Redis e
 RabbitMQ reais via Testcontainers, e um WireMock fazendo as vezes do gateway de
 pagamento.
 
@@ -515,6 +515,21 @@ em vez de carregar tudo e descartar.
 O carrinho resolve isso de forma mais forte: o `cartId` saiu da URL e vem do
 token. Não há identificador alheio a tentar, porque não há identificador.
 
+A conta é a exceção que confirma o critério: `/users/{id}` responde **403**, não
+404. Quem monta essa URL já conhece o id — ele vem do `Location` do cadastro e é
+o *subject* do próprio token —, então não há existência a esconder. O 404 serve
+contra enumeração; onde não há o que enumerar, ele só confunde.
+
+Aqui a regra cabe em anotação, porque depende apenas do id recebido e do token,
+sem precisar carregar o recurso:
+
+```java
+@PreAuthorize("#id.toString() == authentication.name or hasRole('ADMIN')")
+```
+
+Sem ela, qualquer usuário autenticado trocava a senha de qualquer outro — e
+isso é pior do que ler um pedido alheio: não expõe um dado, entrega a conta.
+
 ### Regra de papel na anotação, regra de dono no código
 
 As regras de papel vivem em `@PreAuthorize` nas controllers, não na cadeia de
@@ -679,6 +694,7 @@ senha não aparece em nenhuma resposta.
 | `GET /products`, `GET /products/{id}` | nada — é vitrine |
 | `POST`/`PUT`/`DELETE` `/products` | papel `ADMIN` |
 | `POST /orders/{id}/ship` e `/deliver` | papel `ADMIN` |
+| `/users/{id}` | ser o dono da conta, ou `ADMIN` |
 | todo o resto | autenticação |
 
 A última linha é literal: a regra final é *"qualquer outra requisição exige
@@ -767,7 +783,7 @@ Nome, preço e total vêm do catálogo e do domínio — nunca do cliente.
 - [x] Recursos vinculados ao dono: carrinho, pedidos e pagamentos
 - [x] Primeiro administrador criado na subida, por variável de ambiente
 - [x] Outbox transacional: o evento commita junto com o pedido
-- [x] 313 testes, separados por velocidade (unitários e integração)
+- [x] 316 testes, separados por velocidade (unitários e integração)
 - [x] Pipeline de CI rodando `mvn verify` a cada push
 - [x] Imagem da aplicação e stack completa em Docker, com conexões por variável de ambiente
 - [x] Documentação OpenAPI
