@@ -62,8 +62,9 @@ class AuthController {
 
     @Operation(summary = "Login",
             description = """
-                    Authenticates a user and returns a JWT token. The token must be sent in the
-                    Authorization header of subsequent requests to protected endpoints.
+                    Authenticates a user and returns an access token, to be sent in the
+                    Authorization header of subsequent requests, and a refresh token, to be
+                    exchanged for a new pair once the access token expires.
                     """)
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Authentication successful"),
