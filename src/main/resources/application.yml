@@ -37,7 +37,8 @@ orderflow:
       password: ${ADMIN_PASSWORD:change-me-in-production}
     jwt:
       secret: ${JWT_SECRET:local-development-secret-change-in-production}
-      expiration: ${JWT_EXPIRATION:1h}
+      expiration: ${JWT_EXPIRATION:15m}
+      refresh-expiration: ${JWT_REFRESH_EXPIRATION:7d}
   outbox:
     poll-interval: ${OUTBOX_POLL_INTERVAL:1000}
   payment:

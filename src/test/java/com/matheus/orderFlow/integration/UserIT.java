@@ -254,7 +254,7 @@ class UserIT extends AbstractIntegrationTest {
         String response = login("matheus@example.com", "senhaSegura1");
 
         assertEquals("Bearer", JsonPath.read(response, "$.type"));
-        assertEquals(3600, (int) JsonPath.read(response, "$.expiresIn"));
+        assertEquals(900, (int) JsonPath.read(response, "$.expiresIn"));
 
         String token = JsonPath.read(response, "$.token");
         assertEquals(3, token.split("\\.").length);

@@ -6,10 +6,12 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
+import org.springframework.data.redis.connection.DataType;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 import com.matheus.orderFlow.shared.security.TokenService;
 
+import java.util.Map;
 import java.util.UUID;
 
 @Import({TestcontainersConfiguration.class, DefaultAuthenticationConfiguration.class})
@@ -47,6 +49,35 @@ public abstract class AbstractIntegrationTest {
 
     protected String bearer(UUID userId, String role) {
         return "Bearer " + tokenService.generateToken(userId, role);
+    }
+
+    protected boolean redisContains(String value) {
+        try (var connection = redisConnectionFactory.getConnection()) {
+            for (byte[] key : connection.keyCommands().keys("*".getBytes())) {
+                if (new String(key).contains(value)) {
+                    return true;
+                }
+
+                if (connection.keyCommands().type(key) != DataType.HASH) {
+                    continue;
+                }
+
+                Map<byte[], byte[]> hash = connection.hashCommands().hGetAll(key);
+
+                if (hash == null) {
+                    continue;
+                }
+
+                boolean found = hash.values().stream()
+                        .anyMatch(stored -> stored != null && new String(stored).contains(value));
+
+                if (found) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
     }
 
     @BeforeEach

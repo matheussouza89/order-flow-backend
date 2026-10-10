@@ -3,6 +3,8 @@ package com.matheus.orderFlow.user;
 import com.matheus.orderFlow.shared.exception.InvalidLoginException;
 import com.matheus.orderFlow.shared.exception.NotFoundException;
 import com.matheus.orderFlow.shared.exception.UserAlreadyExistsException;
+import com.matheus.orderFlow.shared.security.RefreshTokenService;
+import com.matheus.orderFlow.shared.security.RotatedToken;
 import com.matheus.orderFlow.shared.security.TokenService;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
@@ -23,6 +25,7 @@ public class UserService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final TokenService tokenService;
+    private final RefreshTokenService refreshTokenService;
 
     private String absentUserHash;
 
@@ -98,9 +101,30 @@ public class UserService {
 
         log.info("User logged in: id={}", user.getId());
 
-        String token = tokenService.generateToken(user.getId(), user.getRole().name());
+        return tokensFor(user, refreshTokenService.issue(user.getId()));
+    }
 
-        return TokenResponse.bearer(token, tokenService.getExpiration().toSeconds());
+    @Transactional(readOnly = true)
+    public TokenResponse refresh(String refreshToken) {
+        RotatedToken rotated = refreshTokenService.rotate(refreshToken);
+
+        User user = userRepository.findById(rotated.userId())
+                .orElseThrow(() -> new InvalidLoginException("Invalid refresh token"));
+
+        log.info("Access token refreshed: id={}", user.getId());
+
+        return tokensFor(user, rotated.refreshToken());
+    }
+
+    public void logout(String refreshToken) {
+        refreshTokenService.revoke(refreshToken);
+    }
+
+    private TokenResponse tokensFor(User user, String refreshToken) {
+        String accessToken = tokenService.generateToken(user.getId(), user.getRole().name());
+
+        return TokenResponse.bearer(
+                accessToken, tokenService.getExpiration().toSeconds(), refreshToken);
     }
 
     private User findOrThrow(UUID id) {

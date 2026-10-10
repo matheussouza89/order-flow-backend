@@ -2,6 +2,8 @@ package com.matheus.orderFlow.user;
 
 import com.matheus.orderFlow.shared.exception.DomainValidationException;
 import com.matheus.orderFlow.shared.exception.InvalidLoginException;
+import com.matheus.orderFlow.shared.security.RefreshTokenService;
+import com.matheus.orderFlow.shared.security.RotatedToken;
 import com.matheus.orderFlow.shared.security.TokenService;
 import com.matheus.orderFlow.shared.exception.NotFoundException;
 import com.matheus.orderFlow.shared.exception.UserAlreadyExistsException;
@@ -32,6 +34,9 @@ class UserServiceTest {
 
     @Mock
     private TokenService tokenService;
+
+    @Mock
+    private RefreshTokenService refreshTokenService;
 
     @InjectMocks
     private UserService userService;
@@ -94,13 +99,49 @@ class UserServiceTest {
         when(userRepository.findByEmail("matheus@example.com")).thenReturn(Optional.of(user));
         when(passwordEncoder.matches("senhaSegura1", HASH)).thenReturn(true);
         when(tokenService.generateToken(any(), eq("USER"))).thenReturn("token-assinado");
-        when(tokenService.getExpiration()).thenReturn(Duration.ofHours(1));
+        when(tokenService.getExpiration()).thenReturn(Duration.ofMinutes(15));
+        when(refreshTokenService.issue(any())).thenReturn("refresh-opaco");
 
         TokenResponse response = userService.login("matheus@example.com", "senhaSegura1");
 
         assertEquals("token-assinado", response.token());
         assertEquals("Bearer", response.type());
-        assertEquals(3600, response.expiresIn());
+        assertEquals(900, response.expiresIn());
+        assertEquals("refresh-opaco", response.refreshToken());
+    }
+
+    @Test
+    void shouldIssueANewPairOnRefresh() {
+        UUID userId = UUID.randomUUID();
+        when(refreshTokenService.rotate("refresh-antigo"))
+                .thenReturn(new RotatedToken(userId, "refresh-novo"));
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user()));
+        when(tokenService.generateToken(any(), eq("USER"))).thenReturn("novo-access");
+        when(tokenService.getExpiration()).thenReturn(Duration.ofMinutes(15));
+
+        TokenResponse response = userService.refresh("refresh-antigo");
+
+        assertEquals("novo-access", response.token());
+        assertEquals("refresh-novo", response.refreshToken());
+    }
+
+    @Test
+    void shouldRejectRefreshWhenTheUserNoLongerExists() {
+        UUID userId = UUID.randomUUID();
+        when(refreshTokenService.rotate("refresh-antigo"))
+                .thenReturn(new RotatedToken(userId, "refresh-novo"));
+        when(userRepository.findById(userId)).thenReturn(Optional.empty());
+
+        assertThrows(InvalidLoginException.class, () -> userService.refresh("refresh-antigo"));
+
+        verifyNoInteractions(tokenService);
+    }
+
+    @Test
+    void shouldDelegateLogoutToTheRefreshTokenService() {
+        userService.logout("refresh-qualquer");
+
+        verify(refreshTokenService).revoke("refresh-qualquer");
     }
 
     @Test

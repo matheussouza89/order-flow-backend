@@ -9,10 +9,12 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
@@ -73,5 +75,36 @@ class AuthController {
     @PostMapping("/login")
     TokenResponse login(@RequestBody LoginDto dto) {
         return userService.login(dto.email(), dto.password());
+    }
+
+    @Operation(summary = "Refresh",
+            description = """
+                    Exchanges a refresh token for a new access token. The refresh token is
+                    rotated: the one sent stops working and a new one is returned. Reusing a
+                    rotated token revokes every token of that login, since reuse suggests the
+                    token was stolen.
+                    """)
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "New token pair issued"),
+            @ApiResponse(responseCode = "401",
+                    description = "Refresh token unknown, expired, already used or revoked",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    @PostMapping("/refresh")
+    TokenResponse refresh(@RequestBody RefreshDto dto) {
+        return userService.refresh(dto.refreshToken());
+    }
+
+    @Operation(summary = "Logout",
+            description = """
+                    Revokes the refresh token and every other token issued from the same login,
+                    so it cannot be exchanged again. The access token already issued stays valid
+                    until it expires.
+                    """)
+    @ApiResponse(responseCode = "204", description = "Logged out")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @PostMapping("/logout")
+    void logout(@RequestBody RefreshDto dto) {
+        userService.logout(dto.refreshToken());
     }
 }

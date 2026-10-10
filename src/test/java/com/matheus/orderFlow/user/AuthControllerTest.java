@@ -126,7 +126,7 @@ class AuthControllerTest {
     @Test
     void shouldReturnTheTokenOnLogin() throws Exception {
         when(userService.login("matheus@example.com", "senhaSegura1"))
-                .thenReturn(new TokenResponse("token-assinado", "Bearer", 3600));
+                .thenReturn(new TokenResponse("token-assinado", "Bearer", 900, "refresh-opaco"));
 
         mockMvc.perform(post("/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -134,7 +134,8 @@ class AuthControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.token").value("token-assinado"))
                 .andExpect(jsonPath("$.type").value("Bearer"))
-                .andExpect(jsonPath("$.expiresIn").value(3600));
+                .andExpect(jsonPath("$.expiresIn").value(900))
+                .andExpect(jsonPath("$.refreshToken").value("refresh-opaco"));
     }
 
     @Test

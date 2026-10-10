@@ -10,12 +10,16 @@ public record TokenResponse(
         @Schema(description = "Scheme to use in the Authorization header", example = "Bearer")
         String type,
 
-        @Schema(description = "Seconds until the token expires", example = "3600")
-        long expiresIn
+        @Schema(description = "Seconds until the access token expires", example = "900")
+        long expiresIn,
+
+        @Schema(description = "Opaque token used to obtain a new access token",
+                example = "0vJ8s2Qk...")
+        String refreshToken
 ) {
     private static final String BEARER = "Bearer";
 
-    static TokenResponse bearer(String token, long expiresIn) {
-        return new TokenResponse(token, BEARER, expiresIn);
+    static TokenResponse bearer(String token, long expiresIn, String refreshToken) {
+        return new TokenResponse(token, BEARER, expiresIn, refreshToken);
     }
 }

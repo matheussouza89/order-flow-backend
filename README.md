@@ -21,7 +21,7 @@ vinculados ao usuário do token (ver [Roadmap](#roadmap)).
 | Framework | Spring Boot 4.1.1 (Web MVC, Data JPA, Validation) |
 | Banco | MySQL 8.4 + Flyway |
 | Mensageria | RabbitMQ |
-| Dado efêmero | Redis (carrinho, com TTL) |
+| Dado efêmero | Redis (carrinho e refresh tokens, com TTL) |
 | Documentação | springdoc-openapi (Swagger UI) |
 | Resiliência | Resilience4j |
 | Segurança | Spring Security + JWT (oauth2-resource-server) |
@@ -84,13 +84,13 @@ alteração:
 ./mvnw test
 ```
 
-Roda os **215 testes unitários** em poucos segundos, sem Docker.
+Roda os **219 testes unitários** em poucos segundos, sem Docker.
 
 ```bash
 ./mvnw verify
 ```
 
-Roda os unitários **mais os 101 de integração**, que sobem MySQL, Redis e
+Roda os unitários **mais os 110 de integração**, que sobem MySQL, Redis e
 RabbitMQ reais via Testcontainers, e um WireMock fazendo as vezes do gateway de
 pagamento.
 
@@ -115,7 +115,7 @@ com.matheus.orderFlow/
     ├── messaging/    exchange e conversor compartilhados
     ├── outbox/       evento gravado em transação e publicado pelo agendador
     ├── web/          PageResponse, envelope das listagens
-    ├── security/     cadeia de filtros, emissão do token e hash de senha
+    ├── security/     cadeia de filtros, tokens de acesso e refresh, hash de senha
     └── exception/    exceções e tratamento global
 ```
 
@@ -437,15 +437,15 @@ tocá-la.
 
 ### Token assinado, sem estado no servidor
 
-O login devolve um JWT válido por uma hora; as demais rotas o exigem no
-cabeçalho `Authorization`. O servidor não guarda quem está logado — o token
-carrega a identidade, assinada, e qualquer instância valida sozinha com a
-chave.
+O login devolve um JWT de acesso; as demais rotas o exigem no cabeçalho
+`Authorization`. O servidor não guarda quem está logado — o token carrega a
+identidade, assinada, e qualquer instância valida sozinha com a chave.
 
-Isso tem um preço que vale registrar: **token não se cancela**. Emitiu, vale até
-expirar, mesmo que o usuário seja apagado no minuto seguinte. É o que se paga
-por não guardar estado, e é o motivo da validade curta. Revogação de verdade
-exigiria uma lista negra no Redis — ou seja, o estado de volta.
+Isso tem um preço que vale registrar: **token assinado não se cancela**. Emitiu,
+vale até expirar, mesmo que o usuário seja apagado no minuto seguinte. É o que
+se paga por não guardar estado, e é o motivo de ele durar quinze minutos — o
+[par com o refresh](#dois-tokens-porque-são-dois-problemas-opostos), logo
+abaixo, é o que transforma isso em revogação utilizável.
 
 O conteúdo do token é codificado, **não criptografado**: qualquer um que o
 tenha consegue ler. A assinatura prova que ninguém alterou, não esconde. Por
@@ -574,6 +574,64 @@ A solução usa o que já existia: o `userId` viaja no `OrderConfirmedEvent`, qu
 cópia, pela mesma razão que o item do pedido guarda o preço — é um fato do
 momento, não uma consulta viva.
 
+### Dois tokens, porque são dois problemas opostos
+
+Token assinado não se cancela, então validade longa significa janela longa para
+quem o roubar. Validade curta resolve isso e cria outro: o usuário é expulso a
+cada quinze minutos.
+
+Os dois se empurram enquanto houver um token só. Com dois, cada um resolve o seu:
+
+| | Validade | Guardado? | Serve para |
+|---|---|---|---|
+| **Access** | 15 min | não | toda requisição |
+| **Refresh** | 7 dias | sim, no Redis | obter um access novo |
+
+O refresh é guardado, então **pode ser apagado** — e apagá-lo revoga de verdade.
+O access continua sem estado e sem consulta, porque a janela dele é de minutos.
+Revogar deixa de ser impossível e passa a ter até quinze minutos de atraso.
+
+A alternativa seria consultar uma lista negra a cada requisição. Funciona e é
+imediata, mas devolve o estado ao caminho de autenticação: com o Redis fora,
+sobra escolher entre barrar todo mundo ou aceitar token revogado.
+
+O refresh **não é um JWT**: é uma string aleatória opaca. Como ele já precisa ser
+consultado, assinar não acrescentaria nada — e opaco não entrega informação a
+quem o roubar.
+
+E o que fica no Redis é o **hash** dele, não o valor, pela mesma razão da senha:
+um dump não deve virar sessão. Com uma diferença que importa — aqui é SHA-256,
+não BCrypt. A lentidão do BCrypt protege segredo de baixa entropia; 256 bits
+aleatórios são inquebráveis por força bruta de qualquer jeito, e pagar o custo
+não compraria nada.
+
+### Refresh reutilizado derruba o login inteiro
+
+Cada uso do refresh emite um novo e invalida o anterior. Sem rotação, um token
+de sete dias seria uma senha permanente trafegando.
+
+A rotação habilita a parte interessante: se um refresh **já usado** reaparecer,
+existem duas cópias dele — e isso é sinal de roubo. A resposta é derrubar todos
+os tokens daquele login, não só o repetido:
+
+```
+atacante rouba o refresh
+vítima usa primeiro    → rotaciona, recebe um novo
+atacante usa o antigo  → 401, e a família inteira cai
+vítima tenta o dela    → 401 também
+```
+
+Os dois perdem acesso, de propósito. Quem tem a senha faz login de novo; o
+atacante não tem. Punir só o repetido deixaria o ladrão dentro se ele chegasse
+primeiro.
+
+Cada login abre a própria família, então sair num dispositivo não desconecta os
+outros.
+
+Um efeito colateral bem-vindo: o access token novo é montado lendo o usuário,
+não copiando o que estava guardado. Rebaixar um administrador passa a valer em
+até quinze minutos, em vez de esperar o refresh expirar.
+
 ### 401 e 403 são respostas diferentes
 
 | | Significa |
@@ -677,7 +735,9 @@ desenvolvimento local.
 | Método | Rota | Status | Descrição |
 |---|---|---|---|
 | `POST` | `/auth/register` | 201 + `Location` | Cria uma conta |
-| `POST` | `/auth/login` | 200 / 401 | Autentica e devolve o token |
+| `POST` | `/auth/login` | 200 / 401 | Autentica e devolve o par de tokens |
+| `POST` | `/auth/refresh` | 200 / 401 | Troca o refresh por um par novo |
+| `POST` | `/auth/logout` | 204 | Revoga os tokens daquele login |
 | `GET` | `/users/{id}` | 200 / 404 | Busca por id |
 | `PUT` | `/users/{id}/name` | 200 / 400 / 404 | Altera o nome |
 | `PUT` | `/users/{id}/email` | 200 / 400 / 404 / 409 | Altera o email |
@@ -783,7 +843,8 @@ Nome, preço e total vêm do catálogo e do domínio — nunca do cliente.
 - [x] Recursos vinculados ao dono: carrinho, pedidos e pagamentos
 - [x] Primeiro administrador criado na subida, por variável de ambiente
 - [x] Outbox transacional: o evento commita junto com o pedido
-- [x] 316 testes, separados por velocidade (unitários e integração)
+- [x] Refresh token rotativo no Redis, com detecção de reuso e logout
+- [x] 329 testes, separados por velocidade (unitários e integração)
 - [x] Pipeline de CI rodando `mvn verify` a cada push
 - [x] Imagem da aplicação e stack completa em Docker, com conexões por variável de ambiente
 - [x] Documentação OpenAPI
