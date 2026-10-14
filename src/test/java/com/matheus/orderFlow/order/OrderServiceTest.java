@@ -14,6 +14,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -291,6 +292,27 @@ public class OrderServiceTest {
         assertEquals(OrderStatus.CONFIRMED, order.getStatus());
         verify(events).publishEvent(any(OrderConfirmedEvent.class));
         verify(orderRepository).saveAndFlush(order);
+    }
+
+    @Test
+    void shouldPublishConfirmationWithTheItemsOfTheOrder() {
+        UUID orderId = UUID.randomUUID();
+
+        when(orderRepository.findById(orderId)).thenReturn(Optional.of(orderAt(OrderStatus.PENDING)));
+
+        orderService.confirmOrder(orderId);
+
+        ArgumentCaptor<OrderConfirmedEvent> captor = ArgumentCaptor.forClass(OrderConfirmedEvent.class);
+        verify(events).publishEvent(captor.capture());
+        OrderConfirmedEvent event = captor.getValue();
+
+        assertEquals(1, event.items().size());
+        OrderConfirmedEvent.Item item = event.items().get(0);
+        assertEquals("Teclado", item.productName());
+        assertEquals(new BigDecimal("100.00"), item.unitPrice());
+        assertEquals(2, item.quantity());
+        assertEquals(new BigDecimal("200.00"), item.subtotal());
+        assertEquals(new BigDecimal("200.00"), event.total());
     }
 
     @Test

@@ -78,6 +78,22 @@ class OutboxIT extends AbstractIntegrationTest {
     }
 
     @Test
+    void shouldCarryTheItemsAndVersionOfTheOrderInTheEvent() throws Exception {
+        String orderId = createOrder();
+
+        mockMvc.perform(post("/orders/{id}/confirm", orderId))
+                .andExpect(status().isOk());
+
+        String payload = onlyOutboxRow().get("payload").toString();
+
+        assertEquals("Teclado", JsonPath.read(payload, "$.items[0].productName"));
+        assertEquals(100.0, ((Number) JsonPath.read(payload, "$.items[0].unitPrice")).doubleValue());
+        assertEquals(1, ((Number) JsonPath.read(payload, "$.items[0].quantity")).intValue());
+        assertEquals(100.0, ((Number) JsonPath.read(payload, "$.items[0].subtotal")).doubleValue());
+        assertEquals(1L, ((Number) JsonPath.read(payload, "$.version")).longValue());
+    }
+
+    @Test
     void shouldPublishTheRecordedEventAndMarkIt() throws Exception {
         String orderId = createOrder();
 

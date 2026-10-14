@@ -86,6 +86,15 @@ public class OrderService {
                         order.getId(),
                         order.getUserId(),
                         order.getTotal(),
+                        order.getItems().stream()
+                                .map(item -> new OrderConfirmedEvent.Item(
+                                        item.getProductId(),
+                                        item.getProductName(),
+                                        item.getUnitPrice(),
+                                        item.getQuantity(),
+                                        item.getSubtotal()))
+                                .toList(),
+                        order.getVersion(),
                         order.getUpdatedAt()
                 )
         );

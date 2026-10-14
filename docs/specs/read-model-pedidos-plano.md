@@ -62,7 +62,9 @@ consome sem depender da entidade `Order`.
   `$dateToString` com `timezone: "America/Sao_Paulo"`. Dias sem venda são
   preenchidos em Java, não no pipeline.
 - **Mensagens antigas sem `items`.** Mensagens publicadas antes da troca chegam
-  com `items` nulo. A projeção as confirma com log e não cria documento. A
+  com `items` e `version` nulos. `version` é `Long` porque o Jackson recusa `null`
+  em primitivo, e isso faria o consumidor de pagamento falhar com mensagens que
+  estão na fila durante o deploy. A projeção as confirma com log e não cria documento. A
   reconstrução (T8) cobre esses pedidos.
 - **Conexão.** `MONGO_URI` com padrão local, como as demais conexões do projeto.
 
