@@ -11,6 +11,9 @@ public class RabbitMqConfig {
 
     public static final String EXCHANGE = "orderflow.events";
     public static final String ORDER_CONFIRMED_KEY = "order.confirmed";
+    public static final String ORDER_SHIPPED_KEY = "order.shipped";
+    public static final String ORDER_DELIVERED_KEY = "order.delivered";
+    public static final String ORDER_CANCELLED_KEY = "order.cancelled";
 
     @Bean
     TopicExchange orderEventsExchange() {

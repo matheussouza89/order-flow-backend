@@ -11,7 +11,7 @@ que prova o critério citado.
 | T1 | `@Version` em `Order`, migration `V7` com `DEFAULT 0 NOT NULL` e handler 409 para conflito de versão. **Concluída** | base de C2 | — |
 | T2 | `saveAndFlush` nas transições. Teste de versão e `occurredAt` após cada transição. O `occurredAt` defasado foi confirmado por teste vermelho e corrigido. **Concluída** | C2 | T1 |
 | T3 | `OrderConfirmedEvent` com `items` e `version`. Teste do payload gravado no outbox e leitura de mensagem antiga. **Concluída** | C5, C6 | T2 |
-| T4 | Eventos `OrderShipped`, `OrderDelivered` e `OrderCancelled`, gravados no outbox nas transições. Teste de uma linha por transição | C2, C3 | T2 |
+| T4 | Eventos `OrderShipped`, `OrderDelivered` e `OrderCancelled`, gravados no outbox nas transições. Teste de uma linha por transição. **Concluída** | C2, C3 | T2 |
 | T5 | Dead-letter exchange compartilhado e fábrica de listener própria da projeção, com 5 tentativas e backoff exponencial. Teste de mensagem que sempre falha indo para a DLQ | C8 | — |
 | T6 | Mongo no `docker-compose`, `MONGO_URI` e container no `AbstractIntegrationTest` | base | — |
 | T7 | Documento `OrderView`, repositório, projetor com upsert guardado por versão e tratamento de E11000. Testes de integração com Mongo real, incluindo Awaitility para a consistência eventual | C1, C2, C3, C4, C5, C6, C7, C9 | T3, T4, T5, T6 |

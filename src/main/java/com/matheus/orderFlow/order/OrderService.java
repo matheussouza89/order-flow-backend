@@ -113,6 +113,10 @@ public class OrderService {
         order.ship();
         orderRepository.saveAndFlush(order);
 
+        events.publishEvent(
+                new OrderShippedEvent(order.getId(), order.getVersion(), order.getUpdatedAt())
+        );
+
         log.info("Order transitioned: id={} from={} to={}",
                 orderId, previousStatus, order.getStatus());
 
@@ -127,6 +131,10 @@ public class OrderService {
         order.deliver();
         orderRepository.saveAndFlush(order);
 
+        events.publishEvent(
+                new OrderDeliveredEvent(order.getId(), order.getVersion(), order.getUpdatedAt())
+        );
+
         log.info("Order transitioned: id={} from={} to={}",
                 orderId, previousStatus, order.getStatus());
 
@@ -140,6 +148,10 @@ public class OrderService {
 
         order.cancel();
         orderRepository.saveAndFlush(order);
+
+        events.publishEvent(
+                new OrderCancelledEvent(order.getId(), order.getVersion(), order.getUpdatedAt())
+        );
 
         log.info("Order transitioned: id={} from={} to={}",
                 orderId, previousStatus, order.getStatus());

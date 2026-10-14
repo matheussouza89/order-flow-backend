@@ -325,6 +325,7 @@ public class OrderServiceTest {
 
         assertEquals(OrderStatus.SHIPPED, order.getStatus());
         verify(orderRepository).saveAndFlush(order);
+        verify(events).publishEvent(any(OrderShippedEvent.class));
     }
 
     @Test
@@ -337,6 +338,7 @@ public class OrderServiceTest {
 
         assertEquals(OrderStatus.DELIVERED, order.getStatus());
         verify(orderRepository).saveAndFlush(order);
+        verify(events).publishEvent(any(OrderDeliveredEvent.class));
     }
 
     @ParameterizedTest
@@ -350,6 +352,7 @@ public class OrderServiceTest {
 
         assertEquals(OrderStatus.CANCELLED, order.getStatus());
         verify(orderRepository).saveAndFlush(order);
+        verify(events).publishEvent(any(OrderCancelledEvent.class));
     }
 
     @ParameterizedTest
