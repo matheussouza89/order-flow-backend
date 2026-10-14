@@ -49,6 +49,9 @@ class Order {
     @Column(nullable = false)
     private Instant updatedAt;
 
+    @Version
+    private long version;
+
     protected Order() {
     }
 

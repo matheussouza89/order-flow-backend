@@ -286,13 +286,11 @@ public class OrderServiceTest {
         Order order = orderAt(OrderStatus.PENDING);
 
         when(orderRepository.findById(orderId)).thenReturn(Optional.of(order));
-        returnSavedOrder();
-
         orderService.confirmOrder(orderId);
 
         assertEquals(OrderStatus.CONFIRMED, order.getStatus());
         verify(events).publishEvent(any(OrderConfirmedEvent.class));
-        verify(orderRepository).save(order);
+        verify(orderRepository).saveAndFlush(order);
     }
 
     @Test
@@ -301,12 +299,10 @@ public class OrderServiceTest {
         Order order = orderAt(OrderStatus.CONFIRMED);
 
         when(orderRepository.findById(orderId)).thenReturn(Optional.of(order));
-        returnSavedOrder();
-
         orderService.shipOrder(orderId);
 
         assertEquals(OrderStatus.SHIPPED, order.getStatus());
-        verify(orderRepository).save(order);
+        verify(orderRepository).saveAndFlush(order);
     }
 
     @Test
@@ -315,12 +311,10 @@ public class OrderServiceTest {
         Order order = orderAt(OrderStatus.SHIPPED);
 
         when(orderRepository.findById(orderId)).thenReturn(Optional.of(order));
-        returnSavedOrder();
-
         orderService.deliverOrder(orderId);
 
         assertEquals(OrderStatus.DELIVERED, order.getStatus());
-        verify(orderRepository).save(order);
+        verify(orderRepository).saveAndFlush(order);
     }
 
     @ParameterizedTest
@@ -330,12 +324,10 @@ public class OrderServiceTest {
         Order order = orderAt(status);
 
         when(orderRepository.findById(orderId)).thenReturn(Optional.of(order));
-        returnSavedOrder();
-
         orderService.cancelOrder(orderId);
 
         assertEquals(OrderStatus.CANCELLED, order.getStatus());
-        verify(orderRepository).save(order);
+        verify(orderRepository).saveAndFlush(order);
     }
 
     @ParameterizedTest
@@ -347,7 +339,7 @@ public class OrderServiceTest {
 
         assertThrows(InvalidStatusTransitionException.class, () -> orderService.confirmOrder(orderId));
 
-        verify(orderRepository, never()).save(any(Order.class));
+        verify(orderRepository, never()).saveAndFlush(any(Order.class));
     }
 
     @ParameterizedTest
@@ -359,7 +351,7 @@ public class OrderServiceTest {
 
         assertThrows(InvalidStatusTransitionException.class, () -> orderService.shipOrder(orderId));
 
-        verify(orderRepository, never()).save(any(Order.class));
+        verify(orderRepository, never()).saveAndFlush(any(Order.class));
     }
 
     @ParameterizedTest
@@ -371,7 +363,7 @@ public class OrderServiceTest {
 
         assertThrows(InvalidStatusTransitionException.class, () -> orderService.deliverOrder(orderId));
 
-        verify(orderRepository, never()).save(any(Order.class));
+        verify(orderRepository, never()).saveAndFlush(any(Order.class));
     }
 
     @ParameterizedTest
@@ -383,7 +375,7 @@ public class OrderServiceTest {
 
         assertThrows(InvalidStatusTransitionException.class, () -> orderService.cancelOrder(orderId));
 
-        verify(orderRepository, never()).save(any(Order.class));
+        verify(orderRepository, never()).saveAndFlush(any(Order.class));
     }
 
     @Test
@@ -394,6 +386,6 @@ public class OrderServiceTest {
 
         assertThrows(NotFoundException.class, () -> orderService.confirmOrder(orderId));
 
-        verify(orderRepository, never()).save(any(Order.class));
+        verify(orderRepository, never()).saveAndFlush(any(Order.class));
     }
 }

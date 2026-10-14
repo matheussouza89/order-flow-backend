@@ -79,7 +79,7 @@ public class OrderService {
         OrderStatus previousStatus = order.getStatus();
 
         order.confirm();
-        orderRepository.save(order);
+        orderRepository.saveAndFlush(order);
 
         events.publishEvent(
                 new OrderConfirmedEvent(
@@ -102,7 +102,7 @@ public class OrderService {
         OrderStatus previousStatus = order.getStatus();
 
         order.ship();
-        orderRepository.save(order);
+        orderRepository.saveAndFlush(order);
 
         log.info("Order transitioned: id={} from={} to={}",
                 orderId, previousStatus, order.getStatus());
@@ -116,7 +116,7 @@ public class OrderService {
         OrderStatus previousStatus = order.getStatus();
 
         order.deliver();
-        orderRepository.save(order);
+        orderRepository.saveAndFlush(order);
 
         log.info("Order transitioned: id={} from={} to={}",
                 orderId, previousStatus, order.getStatus());
@@ -130,7 +130,7 @@ public class OrderService {
         OrderStatus previousStatus = order.getStatus();
 
         order.cancel();
-        orderRepository.save(order);
+        orderRepository.saveAndFlush(order);
 
         log.info("Order transitioned: id={} from={} to={}",
                 orderId, previousStatus, order.getStatus());

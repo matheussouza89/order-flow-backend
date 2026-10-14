@@ -4,10 +4,13 @@ import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.time.Instant;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -15,6 +18,9 @@ class OrderIT extends AbstractIntegrationTest {
 
     @Autowired
     private MockMvc mockMvc;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
 
     private String createProduct(String name, String price) throws Exception {
         String json = """
@@ -258,6 +264,43 @@ class OrderIT extends AbstractIntegrationTest {
 
         mockMvc.perform(get("/orders/{id}", orderId))
                 .andExpect(jsonPath("$.status").value("PENDING"));
+    }
+
+    @Test
+    void shouldStartNewOrderWithVersionZero() throws Exception {
+        createOrder(createProduct("Teclado", "100.00"));
+
+        Long version = jdbcTemplate.queryForObject("SELECT version FROM orders", Long.class);
+
+        assertThat(version).isZero();
+    }
+
+    @Test
+    void shouldIncrementVersionOnEveryTransition() throws Exception {
+        String orderId = createOrder(createProduct("Teclado", "100.00"));
+
+        transition(orderId, "confirm", "CONFIRMED");
+        transition(orderId, "ship", "SHIPPED");
+        transition(orderId, "deliver", "DELIVERED");
+
+        Long version = jdbcTemplate.queryForObject("SELECT version FROM orders", Long.class);
+
+        assertThat(version).isEqualTo(3L);
+    }
+
+    @Test
+    void shouldStampConfirmationEventWithTheMomentOfTheTransition() throws Exception {
+        String orderId = createOrder(createProduct("Teclado", "100.00"));
+
+        Instant before = Instant.now();
+        transition(orderId, "confirm", "CONFIRMED");
+        Instant after = Instant.now();
+
+        String payload = jdbcTemplate.queryForObject(
+                "SELECT payload FROM outbox_messages", String.class);
+        Instant occurredAt = Instant.parse(JsonPath.read(payload, "$.occurredAt"));
+
+        assertThat(occurredAt).isBetween(before, after);
     }
 
     @Test

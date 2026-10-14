@@ -1,6 +1,7 @@
 package com.matheus.orderFlow.shared.exception;
 
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.data.core.PropertyReferenceException;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.AccessDeniedException;
@@ -190,5 +191,17 @@ public class GlobalExceptionHandler {
         ErrorResponse response = new ErrorResponse(401, exception.getMessage());
 
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
+    }
+
+    @ExceptionHandler(OptimisticLockingFailureException.class)
+    public ResponseEntity<ErrorResponse> handleConcurrentModification(
+            OptimisticLockingFailureException exception
+    ) {
+        log.warn("Concurrent modification rejected: {}", exception.getMessage());
+
+        ErrorResponse response = new ErrorResponse(
+                409, "Resource was modified by another request, retry the operation");
+
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
     }
 }
