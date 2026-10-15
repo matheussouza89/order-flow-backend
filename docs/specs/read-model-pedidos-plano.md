@@ -53,7 +53,8 @@ consome sem depender da entidade `Order`.
   (C3).
 - **Retry só na projeção.** A fila da projeção usa uma fábrica de listener
   própria, com 5 tentativas e backoff exponencial. A fábrica padrão, usada pelo
-  pagamento, não muda. O consumidor de cobrança já tem sua política de
+  pagamento, não muda. A fábrica fica no `RabbitMqConfig` compartilhado, com nome
+  próprio (`resilientListenerContainerFactory`), e só a projeção a usa. O consumidor de cobrança já tem sua política de
   resiliência com o gateway, e não deve ganhar uma segunda camada de repetição.
 - **DLQ.** Um dead-letter exchange compartilhado fica no `RabbitMqConfig`. A
   fila da projeção aponta para ele, e cada consumidor continua declarando a
@@ -69,8 +70,10 @@ consome sem depender da entidade `Order`.
 - **Conexão.** `MONGO_URI` com padrão local, como as demais conexões do projeto.
 
 Os nomes exatos do starter de Mongo e das propriedades de retry dependem da
-versão do Spring Boot 4. Eles serão confirmados no classpath antes de implementar,
-como o CLAUDE.md pede.
+versão do Spring Boot 4. Na T5, confirmados no classpath: no Spring AMQP 4.1.1, `maxAttempts` virou
+`maxRetries`, que não conta a primeira tentativa. O configurador do Boot 4 mudou
+para `org.springframework.boot.amqp.autoconfigure`. O starter de Mongo será
+confirmado na T6.
 
 ## Riscos e conflitos encontrados na análise
 
