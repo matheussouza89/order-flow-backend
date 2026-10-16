@@ -72,8 +72,10 @@ consome sem depender da entidade `Order`.
 Os nomes exatos do starter de Mongo e das propriedades de retry dependem da
 versão do Spring Boot 4. Na T5, confirmados no classpath: no Spring AMQP 4.1.1, `maxAttempts` virou
 `maxRetries`, que não conta a primeira tentativa. O configurador do Boot 4 mudou
-para `org.springframework.boot.amqp.autoconfigure`. O starter de Mongo será
-confirmado na T6.
+para `org.springframework.boot.amqp.autoconfigure`. Confirmado na T6: `spring-boot-starter-data-mongodb`
+(com o `-test` correspondente) e `org.testcontainers:testcontainers-mongodb`, com a
+classe `org.testcontainers.mongodb.MongoDBContainer`. A imagem de teste é
+`mongo:8`, fixada na versão principal, enquanto os demais containers usam `latest`.
 
 ## Riscos e conflitos encontrados na análise
 

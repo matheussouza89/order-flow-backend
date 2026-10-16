@@ -19,6 +19,8 @@ spring:
     redis:
       host: ${SPRING_DATA_REDIS_HOST:localhost}
       port: ${SPRING_DATA_REDIS_PORT:6379}
+    mongodb:
+      uri: ${MONGO_URI:mongodb://localhost:27017/orderflow}
     web:
       pageable:
         max-page-size: 100
