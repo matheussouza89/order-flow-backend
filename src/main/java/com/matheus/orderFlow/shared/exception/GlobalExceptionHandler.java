@@ -8,6 +8,7 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.client.HttpClientErrorException;
@@ -123,6 +124,23 @@ public class GlobalExceptionHandler {
 
         ErrorResponse response = new ErrorResponse(
                 400, exception.getName() + ": " + message, errors);
+
+        return ResponseEntity.badRequest().body(response);
+    }
+
+    @ExceptionHandler(MissingServletRequestParameterException.class)
+    public ResponseEntity<ErrorResponse> handleMissingParameter(
+            MissingServletRequestParameterException exception) {
+
+        String message = "Parameter '" + exception.getParameterName() + "' is required";
+
+        log.warn("Missing request parameter '{}'", exception.getParameterName());
+
+        Map<String, String> errors = new LinkedHashMap<>();
+        errors.put(exception.getParameterName(), message);
+
+        ErrorResponse response = new ErrorResponse(
+                400, exception.getParameterName() + ": " + message, errors);
 
         return ResponseEntity.badRequest().body(response);
     }

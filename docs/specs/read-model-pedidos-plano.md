@@ -75,6 +75,10 @@ consome sem depender da entidade `Order`.
   a projeção gravaria: pedidos confirmados, e cancelados depois de confirmados. Os
   itens vêm de `order_items`, que existem mesmo antes dos eventos. O comando é
   `--orderflow.views.rebuild=true` na subida; a aplicação continua rodando depois.
+- **Consultas de vendas.** Agregação com `$dateToString` no fuso `America/Sao_Paulo`,
+  com pedidos cancelados fora. O período de `daily` é limitado a 366 dias, e o
+  `limit` de `top-products` a 100. Parâmetro obrigatório ausente vira 400, não 500:
+  o handler genérico não tratava `MissingServletRequestParameterException`.
 - **Pacote confiável do conversor.** A projeção usa um listener único para os
   quatro tipos de evento. Nesse modo o conversor lê o tipo do cabeçalho
   `__TypeId__`, e o Jackson recusa tipos fora de `java.*` por padrão. O conversor
