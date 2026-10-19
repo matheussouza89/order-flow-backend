@@ -6,6 +6,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.redis.connection.DataType;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -24,6 +26,9 @@ public abstract class AbstractIntegrationTest {
 
     @Autowired
     private RedisConnectionFactory redisConnectionFactory;
+
+    @Autowired
+    private MongoTemplate mongoTemplate;
 
     @Autowired
     private TokenService tokenService;
@@ -90,5 +95,6 @@ public abstract class AbstractIntegrationTest {
         jdbcTemplate.execute("DELETE FROM users");
 
         redisConnectionFactory.getConnection().serverCommands().flushDb();
+        mongoTemplate.remove(new Query(), "order_views");
     }
 }

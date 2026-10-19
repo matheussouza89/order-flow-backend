@@ -14,7 +14,7 @@ que prova o critério citado.
 | T4 | Eventos `OrderShipped`, `OrderDelivered` e `OrderCancelled`, gravados no outbox nas transições. Teste de uma linha por transição. **Concluída** | C2, C3 | T2 |
 | T5 | Dead-letter exchange compartilhado e fábrica de listener própria da projeção, com 5 tentativas e backoff exponencial. Teste de mensagem que sempre falha indo para a DLQ. **Concluída** | C8 | — |
 | T6 | Mongo no `docker-compose`, `MONGO_URI` e container de teste em `TestcontainersConfiguration`. Teste de ping no Mongo real. **Concluída** | base | — |
-| T7 | Documento `OrderView`, repositório, projetor com upsert guardado por versão e tratamento de E11000. Testes de integração com Mongo real, incluindo Awaitility para a consistência eventual | C1, C2, C3, C4, C5, C6, C7, C9 | T3, T4, T5, T6 |
+| T7 | Documento `OrderView`, repositório, projetor com upsert guardado por versão e tratamento de E11000. Testes de integração com Mongo real, incluindo Awaitility para a consistência eventual. **Concluída**, com C7 só em nível unitário, porque o Mongo compartilhado não pode ser derrubado nos testes | C1, C2, C3, C4, C5, C6, C7, C9 | T3, T4, T5, T6 |
 | T8 | Reconstrução a partir do MySQL, com a coleção apagada antes. Teste que compara com `order_items` | C10 | T7 |
 | T9 | `GET /admin/sales/daily` e `GET /admin/sales/top-products`, com `@PreAuthorize` na controller. Teste de 403 para usuário comum | C11, C12, C13 | T7 |
 | T10 | README (link para o ADR e para a spec), descrição no `OpenApiConfig` e contagem de testes | — | T9 |

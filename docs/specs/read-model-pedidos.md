@@ -1,6 +1,6 @@
 # Spec: read model de pedidos
 
-- **Status:** Clarificada (v3)
+- **Status:** Clarificada (v4)
 - **Decisão:** [ADR 0001](../adr/0001-read-model-pedidos-mongodb.md)
 
 ## Objetivo
@@ -81,8 +81,10 @@ O documento não guarda nenhum dado pessoal além do `userId`.
   `OrderShipped` (v3) que chega depois de `OrderDelivered` (v4) não altera o
   status. *(integração)*
 - **C3.** Um evento de mudança de status cujo pedido ainda não tem documento não
-  cria documento. Ele é reentregue com o mesmo backoff de C8; se o documento ainda não existir
-  ao fim das tentativas, vai para a DLQ. *(integração)*
+  cria documento. Ele é adiado por uma fila de espera com TTL de 10 s e reentregue à
+  projeção. A cada adiamento sem documento, o contador sobe. Após 9 adiamentos
+  (cerca de 90 s), vai para a DLQ. A fila principal não trava.
+  *(integração para a aplicação tardia; unitário para o esgotamento)*
 - **C4.** Após o consumo, o documento reflete o estado do pedido no MySQL.
   Verificado com Awaitility, sem `sleep`. *(integração)*
 - **C5.** O documento nunca mostra um item que o pedido não tinha. Os itens vêm
@@ -127,6 +129,7 @@ O documento não guarda nenhum dado pessoal além do `userId`.
    em Brasília aparece no dia em que aconteceu, mesmo sendo o dia seguinte em UTC.
 2. **Tentativas antes da DLQ.** 5, com backoff exponencial (C8).
 3. **Fonte da reconstrução.** O MySQL (C10). Não há retenção de eventos.
-4. **Status sem documento.** Vai para retry e, se esgotado, para a DLQ (C3).
-   Sem esse limite, um `OrderConfirmed` que nunca chega deixaria a mensagem
-   em loop para sempre.
+4. **Status sem documento.** Vai para uma fila de espera com TTL de 10 s e volta
+   à projeção, até 9 adiamentos (cerca de 90 s). Depois disso, vai para a DLQ.
+   O retry na própria fila foi descartado: com um único consumidor, travaria a
+   confirmação atrás do status.

@@ -62,6 +62,6 @@ public class RabbitMqConfig {
 
     @Bean
     MessageConverter messageConverter() {
-        return new JacksonJsonMessageConverter();
+        return new JacksonJsonMessageConverter("com.matheus.orderFlow.order");
     }
 }

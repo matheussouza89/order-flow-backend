@@ -48,9 +48,12 @@ consome sem depender da entidade `Order`.
   documento já tem versão igual ou maior, o upsert tenta inserir com o mesmo
   `_id` e falha com E11000. Esse erro é tratado como "já aplicado", não como
   falha.
-- **Status sem documento.** O update de status não faz upsert. Se nenhum
-  documento for afetado, lança exceção, que aciona o retry e, ao esgotar, a DLQ
-  (C3).
+- **Status sem documento.** O status que chega antes da projeção do pedido não é
+  aplicado nem descartado. Ele é republicado numa fila de espera com TTL de 10 s e
+  volta à projeção depois desse tempo, com um contador de adiamentos. Ao chegar a
+  9 adiamentos, cerca de 90 s, vai para a DLQ. A fila principal não trava, então a
+  confirmação que chega em seguida é aplicada antes da nova tentativa. A escolha
+  está na spec, versão 4, no C3.
 - **Retry só na projeção.** A fila da projeção usa uma fábrica de listener
   própria, com 5 tentativas e backoff exponencial. A fábrica padrão, usada pelo
   pagamento, não muda. A fábrica fica no `RabbitMqConfig` compartilhado, com nome
@@ -68,6 +71,12 @@ consome sem depender da entidade `Order`.
   estão na fila durante o deploy. A projeção as confirma com log e não cria documento. A
   reconstrução (T8) cobre esses pedidos.
 - **Conexão.** `MONGO_URI` com padrão local, como as demais conexões do projeto.
+- **Pacote confiável do conversor.** A projeção usa um listener único para os
+  quatro tipos de evento. Nesse modo o conversor lê o tipo do cabeçalho
+  `__TypeId__`, e o Jackson recusa tipos fora de `java.*` por padrão. O conversor
+  compartilhado passa a confiar em `com.matheus.orderFlow.order`, o pacote do
+  contrato de eventos. O pagamento não era afetado, porque o listener dele declara
+  o tipo no parâmetro.
 
 Os nomes exatos do starter de Mongo e das propriedades de retry dependem da
 versão do Spring Boot 4. Na T5, confirmados no classpath: no Spring AMQP 4.1.1, `maxAttempts` virou
@@ -92,6 +101,10 @@ classe `org.testcontainers.mongodb.MongoDBContainer`. A imagem de teste é
 5. **Conflito de versão.** Com `@Version`, duas transições simultâneas no mesmo
    pedido passam a gerar `OptimisticLockingFailureException`. Antes, a última
    escrita vencia sem aviso. A exceção é mapeada para 409 na T1.
+6. **Status sem documento (resolvido).** Com um único consumidor, o retry na
+   própria fila travaria a confirmação atrás do status. Resolvido com fila de espera
+   com TTL, que deixa a fila principal livre (ver as decisões técnicas e a spec,
+   C3).
 
 ## Fora deste plano
 
