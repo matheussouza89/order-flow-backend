@@ -71,6 +71,10 @@ consome sem depender da entidade `Order`.
   estão na fila durante o deploy. A projeção as confirma com log e não cria documento. A
   reconstrução (T8) cobre esses pedidos.
 - **Conexão.** `MONGO_URI` com padrão local, como as demais conexões do projeto.
+- **Reconstrução.** Lê o MySQL com JDBC, sem as entidades de `order`. Só entra o que
+  a projeção gravaria: pedidos confirmados, e cancelados depois de confirmados. Os
+  itens vêm de `order_items`, que existem mesmo antes dos eventos. O comando é
+  `--orderflow.views.rebuild=true` na subida; a aplicação continua rodando depois.
 - **Pacote confiável do conversor.** A projeção usa um listener único para os
   quatro tipos de evento. Nesse modo o conversor lê o tipo do cabeçalho
   `__TypeId__`, e o Jackson recusa tipos fora de `java.*` por padrão. O conversor

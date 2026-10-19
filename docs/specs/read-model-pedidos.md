@@ -133,3 +133,7 @@ O documento não guarda nenhum dado pessoal além do `userId`.
    à projeção, até 9 adiamentos (cerca de 90 s). Depois disso, vai para a DLQ.
    O retry na própria fila foi descartado: com um único consumidor, travaria a
    confirmação atrás do status.
+5. **Reconstrução.** Lê o MySQL, sem as entidades. Entram só os pedidos que a
+   projeção gravaria: confirmados, e cancelados depois de confirmados. A data de
+   confirmação vem do evento no outbox; pedidos anteriores ao outbox usam a data
+   de criação. Roda com `--orderflow.views.rebuild=true` na subida.

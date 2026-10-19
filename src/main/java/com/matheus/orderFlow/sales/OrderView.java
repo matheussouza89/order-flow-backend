@@ -1,6 +1,9 @@
 package com.matheus.orderFlow.sales;
 
 import com.matheus.orderFlow.order.OrderConfirmedEvent;
+import lombok.AccessLevel;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Getter;
 import org.bson.types.Decimal128;
 import org.springframework.data.annotation.Id;
@@ -12,6 +15,8 @@ import java.util.List;
 
 @Document(collection = OrderView.COLLECTION)
 @Getter
+@Builder
+@AllArgsConstructor(access = AccessLevel.PRIVATE)
 class OrderView {
 
     static final String COLLECTION = "order_views";
@@ -45,6 +50,8 @@ class OrderView {
     }
 
     @Getter
+    @Builder
+    @AllArgsConstructor(access = AccessLevel.PRIVATE)
     static class Line {
 
         private String productId;
