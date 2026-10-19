@@ -17,7 +17,7 @@ que prova o critério citado.
 | T7 | Documento `OrderView`, repositório, projetor com upsert guardado por versão e tratamento de E11000. Testes de integração com Mongo real, incluindo Awaitility para a consistência eventual. **Concluída**, com C7 só em nível unitário, porque o Mongo compartilhado não pode ser derrubado nos testes | C1, C2, C3, C4, C5, C6, C7, C9 | T3, T4, T5, T6 |
 | T8 | Reconstrução a partir do MySQL, com a coleção apagada antes. Teste que compara com `order_items`. **Concluída** | C10 | T7 |
 | T9 | `GET /admin/sales/daily` e `GET /admin/sales/top-products`, com `@PreAuthorize` na controller. Teste de 403 para usuário comum. **Concluída** | C11, C12, C13 | T7 |
-| T10 | README (link para o ADR e para a spec), descrição no `OpenApiConfig` e contagem de testes | — | T9 |
+| T10 | README (link para o ADR e para a spec), descrição no `OpenApiConfig` e contagem de testes. **Concluída** | — | T9 |
 
 ## Cobertura
 

@@ -201,6 +201,18 @@ import org.springframework.context.annotation.Configuration;
                         from the stored token, so demoting an administrator takes effect within
                         one access-token lifetime instead of waiting for the refresh to expire.
 
+                        ## Sales reports
+                        `GET /admin/sales/daily` and `GET /admin/sales/top-products` are for
+                        administrators only. They read a view built from confirmed orders, which
+                        is updated asynchronously: an order confirmed a moment ago may take a few
+                        seconds to appear, and a status change that arrives out of order may take
+                        up to about 90 seconds.
+
+                        Daily totals are grouped by the day of confirmation in America/Sao_Paulo,
+                        include both dates, and show zero for days without sales. Cancelled orders
+                        are left out, and a period is limited to 366 days. The ranking counts units
+                        sold, not revenue, and `limit` accepts from 1 to 100.
+
                         ## Errors
                         Every error response shares the same body (`ErrorResponse`), with
                         `status`, `message` and `errors`. The `errors` map is filled only when
