@@ -1,9 +1,12 @@
 package com.matheus.orderFlow;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.context.annotation.Bean;
 import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.containers.output.Slf4jLogConsumer;
 import org.testcontainers.mongodb.MongoDBContainer;
 import org.testcontainers.mysql.MySQLContainer;
 import org.testcontainers.rabbitmq.RabbitMQContainer;
@@ -33,8 +36,16 @@ public class TestcontainersConfiguration {
 	@Bean
 	@ServiceConnection
 	MongoDBContainer mongoContainer() {
-		MongoDBContainer container = new MongoDBContainer(DockerImageName.parse("mongo:8"));
+		Logger log = LoggerFactory.getLogger("mongo-diag");
+		MongoDBContainer container = new MongoDBContainer(DockerImageName.parse("mongo:8")) {
+			@Override
+			public String getReplicaSetUrl() {
+				log.warn("DIAG read: running={} state={}", isRunning(), getCurrentContainerInfo().getState());
+				return super.getReplicaSetUrl();
+			}
+		}.withLogConsumer(new Slf4jLogConsumer(LoggerFactory.getLogger("mongo-container")));
 		container.start();
+		log.warn("DIAG after start: running={} state={}", container.isRunning(), container.getCurrentContainerInfo().getState());
 		return container;
 	}
 
