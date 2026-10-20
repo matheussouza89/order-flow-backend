@@ -3,10 +3,12 @@
 ## Core Principles
 
 ### I. Decisões têm motivo escrito
-Toda decisão de desenho que vale registrar tem o porquê documentado: no README,
-numa seção de decisões, ou num ADR em `docs/adr/`. O código mostra o que foi feito;
-a documentação mostra por que foi feito assim. Decisão difícil de desfazer, com
-alternativas plausíveis, ganha ADR.
+Toda decisão de desenho que vale registrar tem o porquê documentado: no README ou
+nos artefatos da feature no Spec Kit. O código mostra o que foi feito; a
+documentação mostra por que foi feito assim. Decisão difícil de desfazer, com
+alternativas plausíveis, fica no `research.md` da feature, com a decisão, o motivo
+e as alternativas descartadas. Os ADRs em `docs/adr/` anteriores a esta regra
+ficam como histórico e não recebem novos registros.
 
 ### II. Menos código, desde que diga mais
 Antes de escrever código, verificar se a biblioteca já resolve. Sem DTO intermediário
@@ -72,4 +74,4 @@ próprio com justificativa, e a versão sobe conforme o impacto: MAJOR para remo
 inverter um princípio, MINOR para acrescentar princípio ou seção, PATCH para ajuste
 de redação.
 
-**Version**: 1.0.0 | **Ratified**: 2026-10-20 | **Last Amended**: 2026-10-20
+**Version**: 1.1.0 | **Ratified**: 2026-10-20 | **Last Amended**: 2026-10-20
