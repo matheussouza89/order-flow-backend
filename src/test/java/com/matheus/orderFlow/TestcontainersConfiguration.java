@@ -40,8 +40,22 @@ public class TestcontainersConfiguration {
 		MongoDBContainer container = new MongoDBContainer(DockerImageName.parse("mongo:8")) {
 			@Override
 			public String getReplicaSetUrl() {
-				log.warn("DIAG read: running={} state={}", isRunning(), getCurrentContainerInfo().getState());
-				return super.getReplicaSetUrl();
+				try {
+					return super.getReplicaSetUrl();
+				} catch (IllegalStateException e) {
+					throw new IllegalStateException(e.getMessage() + " DIAG id=" + getContainerId() + " state=" + describeState(), e);
+				}
+			}
+
+			private String describeState() {
+				if (getContainerId() == null) {
+					return "none";
+				}
+				try {
+					return String.valueOf(getCurrentContainerInfo().getState());
+				} catch (RuntimeException inspectFailure) {
+					return "inspect failed: " + inspectFailure;
+				}
 			}
 		}.withLogConsumer(new Slf4jLogConsumer(LoggerFactory.getLogger("mongo-container")));
 		container.start();
