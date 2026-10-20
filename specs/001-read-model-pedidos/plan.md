@@ -1,8 +1,8 @@
 # Plano técnico: read model de pedidos
 
-- **Spec:** [read-model-pedidos](read-model-pedidos.md), v3
-- **Decisão:** [ADR 0001](../adr/0001-read-model-pedidos-mongodb.md), aceito
-- **Tarefas:** [read-model-pedidos-tarefas](read-model-pedidos-tarefas.md)
+- **Spec:** [spec](spec.md), v4
+- **Decisão:** [ADR 0001](../../docs/adr/0001-read-model-pedidos-mongodb.md), aceito
+- **Tarefas:** [tasks](tasks.md)
 
 ## Abordagem
 

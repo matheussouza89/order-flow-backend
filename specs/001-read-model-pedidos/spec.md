@@ -1,7 +1,7 @@
 # Spec: read model de pedidos
 
 - **Status:** Clarificada (v4)
-- **Decisão:** [ADR 0001](../adr/0001-read-model-pedidos-mongodb.md)
+- **Decisão:** [ADR 0001](../../docs/adr/0001-read-model-pedidos-mongodb.md)
 
 ## Objetivo
 

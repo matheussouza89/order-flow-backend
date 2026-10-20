@@ -1,7 +1,7 @@
 # Tarefas: read model de pedidos
 
-- **Plano:** [read-model-pedidos-plano](read-model-pedidos-plano.md)
-- **Spec:** [read-model-pedidos](read-model-pedidos.md), v3
+- **Plano:** [plan](plan.md)
+- **Spec:** [spec](spec.md), v4
 
 Ordem de execução. Cada tarefa termina com `./mvnw verify` verde e com o teste
 que prova o critério citado.

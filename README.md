@@ -751,7 +751,7 @@ O preço do desenho é consistência eventual: uma venda confirmada pode levar
 alguns segundos para aparecer no relatório. A alternativa de guardar a projeção
 numa tabela do próprio MySQL foi considerada e fica registrada no
 [ADR 0001](docs/adr/0001-read-model-pedidos-mongodb.md), junto com a
-[especificação](docs/specs/read-model-pedidos.md).
+[especificação](specs/001-read-model-pedidos/spec.md).
 
 ## Endpoints
 
