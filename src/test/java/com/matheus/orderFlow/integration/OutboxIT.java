@@ -78,6 +78,22 @@ class OutboxIT extends AbstractIntegrationTest {
     }
 
     @Test
+    void shouldCarryTheItemsAndVersionOfTheOrderInTheEvent() throws Exception {
+        String orderId = createOrder();
+
+        mockMvc.perform(post("/orders/{id}/confirm", orderId))
+                .andExpect(status().isOk());
+
+        String payload = onlyOutboxRow().get("payload").toString();
+
+        assertEquals("Teclado", JsonPath.read(payload, "$.items[0].productName"));
+        assertEquals(100.0, ((Number) JsonPath.read(payload, "$.items[0].unitPrice")).doubleValue());
+        assertEquals(1, ((Number) JsonPath.read(payload, "$.items[0].quantity")).intValue());
+        assertEquals(100.0, ((Number) JsonPath.read(payload, "$.items[0].subtotal")).doubleValue());
+        assertEquals(1L, ((Number) JsonPath.read(payload, "$.version")).longValue());
+    }
+
+    @Test
     void shouldPublishTheRecordedEventAndMarkIt() throws Exception {
         String orderId = createOrder();
 
@@ -134,5 +150,47 @@ class OutboxIT extends AbstractIntegrationTest {
         mockMvc.perform(post("/orders/{id}/confirm", secondOrder)).andExpect(status().isOk());
 
         assertEquals(2, outboxCount());
+    }
+
+    private String payloadOf(String routingKey) {
+        return jdbcTemplate.queryForObject(
+                "SELECT payload FROM outbox_messages WHERE routing_key = ?", String.class, routingKey);
+    }
+
+    private long versionIn(String payload) {
+        return ((Number) JsonPath.read(payload, "$.version")).longValue();
+    }
+
+    @Test
+    void shouldRecordEachTransitionWithTheVersionReachedByIt() throws Exception {
+        String orderId = createOrder();
+
+        mockMvc.perform(post("/orders/{id}/confirm", orderId)).andExpect(status().isOk());
+        mockMvc.perform(post("/orders/{id}/ship", orderId)).andExpect(status().isOk());
+        mockMvc.perform(post("/orders/{id}/deliver", orderId)).andExpect(status().isOk());
+
+        assertEquals(3, outboxCount());
+        assertEquals(orderId, JsonPath.read(payloadOf("order.shipped"), "$.orderId"));
+        assertEquals(2L, versionIn(payloadOf("order.shipped")));
+        assertEquals(3L, versionIn(payloadOf("order.delivered")));
+    }
+
+    @Test
+    void shouldRecordCancellationWithTheVersionReachedByIt() throws Exception {
+        String orderId = createOrder();
+
+        mockMvc.perform(post("/orders/{id}/confirm", orderId)).andExpect(status().isOk());
+        mockMvc.perform(post("/orders/{id}/cancel", orderId)).andExpect(status().isOk());
+
+        assertEquals(2L, versionIn(payloadOf("order.cancelled")));
+    }
+
+    @Test
+    void shouldNotRecordShipmentOfAnOrderThatWasNotConfirmed() throws Exception {
+        String orderId = createOrder();
+
+        mockMvc.perform(post("/orders/{id}/ship", orderId)).andExpect(status().isConflict());
+
+        assertEquals(0, outboxCount());
     }
 }

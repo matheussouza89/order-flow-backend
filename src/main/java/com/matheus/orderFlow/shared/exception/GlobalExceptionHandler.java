@@ -1,12 +1,14 @@
 package com.matheus.orderFlow.shared.exception;
 
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.data.core.PropertyReferenceException;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.client.HttpClientErrorException;
@@ -126,6 +128,23 @@ public class GlobalExceptionHandler {
         return ResponseEntity.badRequest().body(response);
     }
 
+    @ExceptionHandler(MissingServletRequestParameterException.class)
+    public ResponseEntity<ErrorResponse> handleMissingParameter(
+            MissingServletRequestParameterException exception) {
+
+        String message = "Parameter '" + exception.getParameterName() + "' is required";
+
+        log.warn("Missing request parameter '{}'", exception.getParameterName());
+
+        Map<String, String> errors = new LinkedHashMap<>();
+        errors.put(exception.getParameterName(), message);
+
+        ErrorResponse response = new ErrorResponse(
+                400, exception.getParameterName() + ": " + message, errors);
+
+        return ResponseEntity.badRequest().body(response);
+    }
+
     @ExceptionHandler(AccessDeniedException.class)
     public ResponseEntity<ErrorResponse> handleAccessDenied(AccessDeniedException exception) {
         log.warn("Access denied: {}", exception.getMessage());
@@ -190,5 +209,17 @@ public class GlobalExceptionHandler {
         ErrorResponse response = new ErrorResponse(401, exception.getMessage());
 
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
+    }
+
+    @ExceptionHandler(OptimisticLockingFailureException.class)
+    public ResponseEntity<ErrorResponse> handleConcurrentModification(
+            OptimisticLockingFailureException exception
+    ) {
+        log.warn("Concurrent modification rejected: {}", exception.getMessage());
+
+        ErrorResponse response = new ErrorResponse(
+                409, "Resource was modified by another request, retry the operation");
+
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
     }
 }

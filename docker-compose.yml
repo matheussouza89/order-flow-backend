@@ -10,6 +10,7 @@ services:
       SPRING_DATASOURCE_PASSWORD: orderflow
       SPRING_DATA_REDIS_HOST: redis
       SPRING_RABBITMQ_HOST: rabbitmq
+      MONGO_URI: mongodb://mongo:27017/orderflow
       PAYMENT_GATEWAY_URL: http://wiremock:8080
       ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@orderflow.local}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-change-me-in-production}
@@ -22,6 +23,8 @@ services:
       redis:
         condition: service_started
       rabbitmq:
+        condition: service_started
+      mongo:
         condition: service_started
     networks:
       - orderflow-network
@@ -70,6 +73,17 @@ services:
     networks:
       - orderflow-network
 
+  mongo:
+    image: mongo:8
+    container_name: orderflow-mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - orderflow-network
+
   rabbitmq:
     image: rabbitmq:4-management
     container_name: orderflow-rabbitmq
@@ -88,6 +102,7 @@ services:
 volumes:
   mysql_data:
   redis_data:
+  mongo_data:
   rabbitmq_data:
 
 networks:

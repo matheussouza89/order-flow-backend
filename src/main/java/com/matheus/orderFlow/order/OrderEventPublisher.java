@@ -15,4 +15,19 @@ class OrderEventPublisher {
     void onOrderConfirmed(OrderConfirmedEvent event) {
         outboxWriter.record(RabbitMqConfig.ORDER_CONFIRMED_KEY, event);
     }
+
+    @EventListener
+    void onOrderShipped(OrderShippedEvent event) {
+        outboxWriter.record(RabbitMqConfig.ORDER_SHIPPED_KEY, event);
+    }
+
+    @EventListener
+    void onOrderDelivered(OrderDeliveredEvent event) {
+        outboxWriter.record(RabbitMqConfig.ORDER_DELIVERED_KEY, event);
+    }
+
+    @EventListener
+    void onOrderCancelled(OrderCancelledEvent event) {
+        outboxWriter.record(RabbitMqConfig.ORDER_CANCELLED_KEY, event);
+    }
 }

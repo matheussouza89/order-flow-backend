@@ -79,13 +79,22 @@ public class OrderService {
         OrderStatus previousStatus = order.getStatus();
 
         order.confirm();
-        orderRepository.save(order);
+        orderRepository.saveAndFlush(order);
 
         events.publishEvent(
                 new OrderConfirmedEvent(
                         order.getId(),
                         order.getUserId(),
                         order.getTotal(),
+                        order.getItems().stream()
+                                .map(item -> new OrderConfirmedEvent.Item(
+                                        item.getProductId(),
+                                        item.getProductName(),
+                                        item.getUnitPrice(),
+                                        item.getQuantity(),
+                                        item.getSubtotal()))
+                                .toList(),
+                        order.getVersion(),
                         order.getUpdatedAt()
                 )
         );
@@ -102,7 +111,11 @@ public class OrderService {
         OrderStatus previousStatus = order.getStatus();
 
         order.ship();
-        orderRepository.save(order);
+        orderRepository.saveAndFlush(order);
+
+        events.publishEvent(
+                new OrderShippedEvent(order.getId(), order.getVersion(), order.getUpdatedAt())
+        );
 
         log.info("Order transitioned: id={} from={} to={}",
                 orderId, previousStatus, order.getStatus());
@@ -116,7 +129,11 @@ public class OrderService {
         OrderStatus previousStatus = order.getStatus();
 
         order.deliver();
-        orderRepository.save(order);
+        orderRepository.saveAndFlush(order);
+
+        events.publishEvent(
+                new OrderDeliveredEvent(order.getId(), order.getVersion(), order.getUpdatedAt())
+        );
 
         log.info("Order transitioned: id={} from={} to={}",
                 orderId, previousStatus, order.getStatus());
@@ -130,7 +147,11 @@ public class OrderService {
         OrderStatus previousStatus = order.getStatus();
 
         order.cancel();
-        orderRepository.save(order);
+        orderRepository.saveAndFlush(order);
+
+        events.publishEvent(
+                new OrderCancelledEvent(order.getId(), order.getVersion(), order.getUpdatedAt())
+        );
 
         log.info("Order transitioned: id={} from={} to={}",
                 orderId, previousStatus, order.getStatus());

@@ -22,6 +22,7 @@ vinculados ao usuário do token (ver [Roadmap](#roadmap)).
 | Banco | MySQL 8.4 + Flyway |
 | Mensageria | RabbitMQ |
 | Dado efêmero | Redis (carrinho e refresh tokens, com TTL) |
+| Leitura de vendas | MongoDB (projeção de pedidos, com Spring Data MongoDB) |
 | Documentação | springdoc-openapi (Swagger UI) |
 | Resiliência | Resilience4j |
 | Segurança | Spring Security + JWT (oauth2-resource-server) |
@@ -34,7 +35,7 @@ vinculados ao usuário do token (ver [Roadmap](#roadmap)).
 
 **Pré-requisito:** Docker.
 
-Suba o projeto inteiro — API, MySQL, Redis e RabbitMQ:
+Suba o projeto inteiro — API, MySQL, MongoDB, Redis e RabbitMQ:
 
 ```bash
 docker compose up --build
@@ -60,7 +61,7 @@ Para desenvolver com a aplicação fora do container (Java 21 necessário), suba
 só a infraestrutura e rode pelo Maven:
 
 ```bash
-docker compose up -d mysql redis rabbitmq
+docker compose up -d mysql mongo redis rabbitmq
 ```
 
 ```bash
@@ -84,13 +85,13 @@ alteração:
 ./mvnw test
 ```
 
-Roda os **219 testes unitários** em poucos segundos, sem Docker.
+Roda os **231 testes unitários** em poucos segundos, sem Docker.
 
 ```bash
 ./mvnw verify
 ```
 
-Roda os unitários **mais os 110 de integração**, que sobem MySQL, Redis e
+Roda os unitários **mais os 134 de integração**, que sobem MySQL, MongoDB, Redis e
 RabbitMQ reais via Testcontainers, e um WireMock fazendo as vezes do gateway de
 pagamento.
 
@@ -110,6 +111,7 @@ com.matheus.orderFlow/
 ├── cart/             Cart, CartService, CartRepository, CartController, DTOs
 ├── order/            Order, OrderItem, OrderStatus, OrderService, OrderController, DTOs
 ├── payment/          Payment, PaymentService, PaymentProcessor, gateway e listener, DTOs
+├── sales/            projeção de pedidos em MongoDB e relatórios de vendas
 └── shared/
     ├── config/       configuração da aplicação
     ├── messaging/    exchange e conversor compartilhados
@@ -728,6 +730,29 @@ desenvolvimento local.
 
 ---
 
+### Projeção de leitura em MongoDB
+
+As consultas administrativas de vendas, por dia e por produto, são agregações
+sobre `orders` e `order_items`. Rodadas no mesmo banco que recebe as escritas,
+competem com elas. A projeção separa essa leitura: um documento por pedido, em
+MongoDB, alimentado pelos eventos do RabbitMQ.
+
+O MySQL continua sendo a única fonte de verdade. A projeção não recebe regra de
+negócio e pode ser apagada e reconstruída a partir do MySQL, com
+`--orderflow.views.rebuild=true`.
+
+Eventos repetidos ou fora de ordem são tratados pela versão do pedido: a mesma
+confirmação não duplica o documento, e um evento antigo não faz o status
+regredir. Um status que chega antes da confirmação espera numa fila com TTL de
+10 segundos, por até nove vezes, antes de ir para a DLQ. O retry na própria fila
+travaria a confirmação atrás dele.
+
+O preço do desenho é consistência eventual: uma venda confirmada pode levar
+alguns segundos para aparecer no relatório. A alternativa de guardar a projeção
+numa tabela do próprio MySQL foi considerada e fica registrada no
+[ADR 0001](docs/adr/0001-read-model-pedidos-mongodb.md), junto com a
+[especificação](docs/specs/read-model-pedidos.md).
+
 ## Endpoints
 
 **Contas**
@@ -825,6 +850,18 @@ Nome, preço e total vêm do catálogo e do domínio — nunca do cliente.
 
 ---
 
+**Vendas (somente ADMIN)**
+
+| Método | Rota | Status | Descrição |
+|---|---|---|---|
+| `GET` | `/admin/sales/daily?from=&to=` | 200 / 400 / 403 | Total por dia de confirmação, no fuso de São Paulo |
+| `GET` | `/admin/sales/top-products?limit=` | 200 / 400 / 403 | Produtos mais vendidos, por quantidade |
+
+Pedidos cancelados ficam fora dos totais. Os relatórios vêm da projeção, com
+alguns segundos de atraso em relação ao pedido.
+
+---
+
 ## Roadmap
 
 **Concluído**
@@ -844,7 +881,11 @@ Nome, preço e total vêm do catálogo e do domínio — nunca do cliente.
 - [x] Primeiro administrador criado na subida, por variável de ambiente
 - [x] Outbox transacional: o evento commita junto com o pedido
 - [x] Refresh token rotativo no Redis, com detecção de reuso e logout
-- [x] 329 testes, separados por velocidade (unitários e integração)
+- [x] Projeção de pedidos em MongoDB, com upsert guardado por versão
+- [x] Fila de espera e DLQ para status que chega antes da confirmação
+- [x] Reconstrução da projeção a partir do MySQL
+- [x] Relatórios administrativos de vendas por dia e por produto
+- [x] 365 testes, separados por velocidade (unitários e integração)
 - [x] Pipeline de CI rodando `mvn verify` a cada push
 - [x] Imagem da aplicação e stack completa em Docker, com conexões por variável de ambiente
 - [x] Documentação OpenAPI

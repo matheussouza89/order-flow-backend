@@ -23,6 +23,15 @@ jobs:
       - name: Build and run tests
         run: ./mvnw --batch-mode --no-transfer-progress verify
 
+      - name: Upload test reports on failure
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: test-reports
+          path: |
+            target/surefire-reports/
+            target/failsafe-reports/
+
       - name: Publish test report
         uses: mikepenz/action-junit-report@v5
         if: always()
