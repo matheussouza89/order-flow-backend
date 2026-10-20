@@ -12,6 +12,8 @@ import org.testcontainers.mysql.MySQLContainer;
 import org.testcontainers.rabbitmq.RabbitMQContainer;
 import org.testcontainers.utility.DockerImageName;
 
+import java.util.stream.Collectors;
+
 @TestConfiguration(proxyBeanMethods = false)
 public class TestcontainersConfiguration {
 
@@ -52,9 +54,22 @@ public class TestcontainersConfiguration {
 					return "none";
 				}
 				try {
-					return String.valueOf(getCurrentContainerInfo().getState());
+					var info = getCurrentContainerInfo();
+					return info.getState() + " created=" + info.getCreated() + " restarts=" + info.getRestartCount() + " logs=" + tailOfLogs();
 				} catch (RuntimeException inspectFailure) {
 					return "inspect failed: " + inspectFailure;
+				}
+			}
+
+			private String tailOfLogs() {
+				try {
+					String logs = getLogs();
+					return logs.lines()
+						.skip(Math.max(0, logs.lines().count() - 12))
+						.map(line -> line.length() > 500 ? line.substring(0, 500) : line)
+						.collect(Collectors.joining(" | "));
+				} catch (RuntimeException logsFailure) {
+					return "unavailable: " + logsFailure;
 				}
 			}
 		}.withLogConsumer(new Slf4jLogConsumer(LoggerFactory.getLogger("mongo-container")));
