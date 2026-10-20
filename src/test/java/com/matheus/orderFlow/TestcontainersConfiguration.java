@@ -33,7 +33,9 @@ public class TestcontainersConfiguration {
 	@Bean
 	@ServiceConnection
 	MongoDBContainer mongoContainer() {
-		return new MongoDBContainer(DockerImageName.parse("mongo:8"));
+		MongoDBContainer container = new MongoDBContainer(DockerImageName.parse("mongo:8"));
+		container.start();
+		return container;
 	}
 
 }
