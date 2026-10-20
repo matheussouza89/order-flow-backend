@@ -74,7 +74,7 @@ services:
       - orderflow-network
 
   mongo:
-    image: mongo:8
+    image: mongo:7
     container_name: orderflow-mongo
     restart: unless-stopped
     ports:

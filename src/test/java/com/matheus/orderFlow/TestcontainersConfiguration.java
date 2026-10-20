@@ -4,6 +4,7 @@ import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.context.annotation.Bean;
 import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.containers.wait.strategy.Wait;
 import org.testcontainers.mongodb.MongoDBContainer;
 import org.testcontainers.mysql.MySQLContainer;
 import org.testcontainers.rabbitmq.RabbitMQContainer;
@@ -33,9 +34,8 @@ public class TestcontainersConfiguration {
 	@Bean
 	@ServiceConnection
 	MongoDBContainer mongoContainer() {
-		MongoDBContainer container = new MongoDBContainer(DockerImageName.parse("mongo:8"));
-		container.start();
-		return container;
+		return new MongoDBContainer(DockerImageName.parse("mongo:7"))
+				.waitingFor(Wait.forLogMessage("(?i).*waiting for connections.*", 1));
 	}
 
 }
