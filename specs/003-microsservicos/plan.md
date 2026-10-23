@@ -87,8 +87,13 @@ specs/003-microsservicos/
 
 ```text
 pom.xml                   # agregador e parent de todos os módulos
-platform/                 # biblioteca sem domínio: ErrorResponse e handler,
-                          # resource server, outbox, mensageria, cliente HTTP
+platform/                 # bibliotecas sem domínio, cada serviço usa só as suas
+├── platform-web/         # ErrorResponse, handler de erros, PageResponse
+├── platform-security/    # resource server, rotas públicas por propriedade,
+│                         # repasse da credencial nas chamadas HTTP
+├── platform-messaging/   # exchange, DLX e DLQ, conversor com ids lógicos
+├── platform-outbox/      # outbox com traceparent
+└── platform-test/        # par de chaves e tokens para os testes
 contracts/                # fatos publicados e ids lógicos de tipo
 gateway/                  # entrada única e página única de documentação
 monolith/                 # a aplicação de hoje; perde um pacote por etapa
@@ -112,9 +117,13 @@ Cada serviço tem o layout Maven de sempre:
 `src/main/resources/db/migration/` (quando usa MySQL) e os testes em
 `src/test/java/` no mesmo pacote.
 
-**Structure Decision**: Maven multi-módulo num repositório (R2). Os serviços
-mantêm o pacote da funcionalidade de hoje (R17). O `monolith` existe só durante a
-migração e vira `services/orders` na última etapa (R16).
+**Structure Decision**: Maven multi-módulo num repositório (R2). O `platform` é
+dividido em módulos pequenos para que cada serviço dependa só do que usa, sem
+configuração condicional: o gateway não carrega o resource server, e um serviço sem
+JPA não carrega o outbox. Os serviços mantêm o pacote da funcionalidade de hoje, e a
+classe de aplicação de cada um fica em `com.matheus.orderFlow`, para que o
+component scan alcance os pacotes do `platform` (R17). O `monolith` existe só
+durante a migração e vira `services/orders` na última etapa (R16).
 
 ## Etapas
 
@@ -142,7 +151,8 @@ Cada user story é uma etapa, entregue e testada sozinha (FR-013).
    usar, como pede a constituição.
 4. **Parada nas etapas com `RENAME TABLE`.** O monólito e o serviço novo não podem
    escrever na tabela ao mesmo tempo; a etapa para o sistema por alguns minutos,
-   como as premissas aceitam.
+   como as premissas aceitam. O script de cada etapa fica em
+   `docker/mysql/migrations/` e tem teste próprio.
 
 ## Complexity Tracking
 

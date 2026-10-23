@@ -52,8 +52,14 @@ Resilience4j 2.3.0, Testcontainers 2.0.5.
 
 ## R2. Organização do repositório
 
-- **Decisão**: um repositório, Maven multi-módulo. Módulos: `platform`,
-  `contracts`, `gateway`, `services/<serviço>`, `monolith` (temporário) e `e2e`.
+- **Decisão**: um repositório, Maven multi-módulo. Módulos: `platform/platform-web`,
+  `platform/platform-security`, `platform/platform-messaging`,
+  `platform/platform-outbox`, `platform/platform-test`, `contracts`, `gateway`,
+  `services/<serviço>`, `monolith` (temporário) e `e2e`. O `platform` é dividido
+  para que cada serviço dependa só do que usa: o gateway não pode carregar o
+  resource server, e serviços sem JPA ou sem RabbitMQ não podem carregar o outbox
+  ou a mensageria. Com módulos separados, nenhuma configuração precisa ser
+  condicional.
 - **Motivo**: um build, um CI e um histórico; o portfólio mostra a arquitetura
   inteira num lugar. O Maven já é a ferramenta do projeto.
 - **Alternativas consideradas**: um repositório por serviço, que exige versionar e
@@ -136,9 +142,13 @@ Resilience4j 2.3.0, Testcontainers 2.0.5.
 
 - **Decisão**: um servidor MySQL com um schema e um usuário por serviço, cada
   usuário com permissão só no próprio schema. Cada serviço tem seu Flyway, com a
-  primeira migração em `CREATE TABLE IF NOT EXISTS`. Na etapa de extração, uma
-  migração do monólito move as tabelas com `RENAME TABLE orderflow.x TO
-  <schema>.x`, que é atômico e não copia dados. No Redis, um usuário de ACL por
+  primeira migração em `CREATE TABLE IF NOT EXISTS`. Na etapa de extração, um
+  script operacional em `docker/mysql/migrations/` move as tabelas com
+  `RENAME TABLE orderflow.x TO <schema>.x`, que é atômico e não copia dados. O
+  script roda uma vez, como root, nos volumes que já têm dados; ambientes novos
+  recebem as tabelas pela `V1` do serviço. Não é uma migração do Flyway do
+  monólito porque, nos testes, o usuário do monólito só tem permissão no próprio
+  schema e não consegue criar nem renomear para outro. No Redis, um usuário de ACL por
   serviço, restrito ao prefixo das chaves (`refreshToken*` para `identity`,
   `cart*` para `cart`).
 - **Motivo**: o FR-003 fica garantido por permissão, não por convenção. O
@@ -260,13 +270,18 @@ Resilience4j 2.3.0, Testcontainers 2.0.5.
 ## R17. Pacotes
 
 - **Decisão**: cada serviço mantém o pacote da funcionalidade de hoje
-  (`com.matheus.orderFlow.product`, `...cart`, `...order`) e ganha ali a classe de
-  aplicação. O `platform` mantém `com.matheus.orderFlow.shared`; o `contracts`
-  usa `com.matheus.orderFlow.contracts`.
-- **Motivo**: mover sem renomear preserva o histórico do git e os testes. A regra de
+  (`com.matheus.orderFlow.product`, `...cart`, `...order`). A classe de aplicação
+  de cada serviço fica em `com.matheus.orderFlow` (`CatalogApplication`,
+  `CartApplication` e assim por diante). O `platform` mantém
+  `com.matheus.orderFlow.shared`; o `contracts` usa
+  `com.matheus.orderFlow.contracts`.
+- **Motivo**: mover sem renomear preserva o histórico do git e os testes. Com a
+  classe de aplicação no pacote raiz, o component scan e a varredura de entidades
+  alcançam os pacotes do `platform` sem auto-configuração. A regra de
   visibilidade (princípio V) continua valendo dentro de cada serviço.
-- **Alternativas consideradas**: um pacote raiz novo por serviço (renomeia tudo sem
-  ganho).
+- **Alternativas consideradas**: classe de aplicação no pacote da funcionalidade,
+  que exigiria auto-configuração em cada módulo do `platform`; um pacote raiz novo
+  por serviço, que renomeia tudo sem ganho.
 
 ## Pendências
 

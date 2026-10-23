@@ -51,11 +51,12 @@ O resto da tabela não muda: `id`, `routing_key`, `payload_type`, `payload`,
 
 ## Movimentação dos dados existentes
 
-Na etapa de extração de cada serviço, uma migração do monólito executa
-`RENAME TABLE orderflow.<tabela> TO <schema>.<tabela>`. A operação é atômica e não
-copia linhas (FR-012). O Flyway do serviço novo começa com
-`CREATE TABLE IF NOT EXISTS`, que cria as tabelas num banco vazio, como nos
-testes, e não faz nada quando elas já chegaram pela migração.
+Na etapa de extração de cada serviço, um script operacional em
+`docker/mysql/migrations/` executa `RENAME TABLE orderflow.<tabela> TO
+<schema>.<tabela>`, uma vez e como root, nos volumes que já têm dados. A operação
+é atômica e não copia linhas (FR-012). O Flyway do serviço novo começa com
+`CREATE TABLE IF NOT EXISTS`, que cria as tabelas num banco vazio, como nos testes
+e em ambientes novos, e não faz nada quando elas já chegaram pelo script.
 
 | Etapa | Tabelas movidas | Schema |
 |---|---|---|
