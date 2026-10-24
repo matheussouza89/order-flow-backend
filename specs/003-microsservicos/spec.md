@@ -18,6 +18,10 @@
 - Q: Quando um serviço muda o formato de um fato que publica, o que acontece com os serviços que já consomem esse fato? → A: (a) O formato só muda acrescentando informação; remover ou renomear exige uma nova versão do fato, mantendo a antiga até todos os consumidores migrarem.
 - Q: Onde quem usa a API encontra a documentação das rotas depois da separação? → A: (a) Uma única página, na entrada única, com a documentação de todos os serviços.
 
+### Session 2026-10-24
+
+- Q: A separação inclui medir o desempenho sob carga? → A: Sim. Um teste de carga reproduzível mede o sistema depois da User Story 1, como linha de base, e de novo no fim da migração, com metas de tempo de resposta e de falhas.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Entrada única e credenciais verificáveis por qualquer serviço (Priority: P1)
@@ -162,13 +166,14 @@ O que resta do sistema único é o serviço de pedidos. Ao fim desta etapa, o si
 - **FR-011**: A troca do mecanismo de credencial NÃO DEVE obrigar quem já está logado a entrar de novo.
 - **FR-012**: Os dados existentes DEVEM ser preservados na migração, sem perda nem duplicação.
 - **FR-013**: A migração DEVE acontecer uma capacidade por vez, e o sistema DEVE funcionar por completo ao fim de cada etapa.
-- **FR-014**: Uma chamada imediata entre serviços feita em nome de um cliente DEVE levar a credencial desse cliente, e o serviço chamado DEVE aplicar as mesmas regras de acesso de uma requisição externa. Nenhum serviço DEVE aceitar uma chamada sem credencial válida por ela vir de dentro do sistema.
+- **FR-014**: Uma chamada imediata entre serviços feita em nome de um cliente DEVE levar a credencial desse cliente, e o serviço chamado DEVE aplicar as mesmas regras de acesso de uma requisição externa. Nenhum serviço DEVE aceitar, numa rota que exige credencial, uma chamada sem credencial válida por ela vir de dentro do sistema.
 - **FR-015**: Todos os serviços, com a infraestrutura de que dependem, DEVEM subir juntos por um único comando na máquina local e no CI.
 - **FR-016**: Cada requisição DEVE receber um identificador que acompanha todas as chamadas e todos os fatos publicados a partir dela, e esse identificador DEVE aparecer nos registros de todos os serviços que ela atravessar.
 - **FR-017**: Quem opera DEVE conseguir ver, a partir desse identificador, o caminho completo da requisição pelos serviços, com o tempo gasto em cada passo e o passo em que ela falhou.
 - **FR-018**: O formato de um fato publicado DEVE mudar só acrescentando informação. Remover ou renomear informação DEVE gerar uma nova versão do fato, e a versão antiga DEVE continuar sendo publicada até todos os consumidores migrarem.
 - **FR-019**: Um consumidor DEVE processar um fato que traga informação que ele ainda não conhece, usando o que conhece e ignorando o resto.
 - **FR-020**: A documentação de todas as rotas DEVE ficar numa única página, acessível pela entrada única, mesmo com cada serviço documentando as próprias rotas.
+- **FR-021**: O sistema DEVE ter um teste de carga reproduzível por um comando, que exercita vitrine, carrinho, finalização da compra e consulta de pedidos pela entrada única. O resultado da linha de base, medida depois da User Story 1, e o do fim da migração DEVEM ficar registrados lado a lado.
 
 ### Key Entities
 
@@ -181,7 +186,7 @@ O que resta do sistema único é o serviço de pedidos. Ao fim desta etapa, o si
 
 ### Measurable Outcomes
 
-- **SC-001**: 100% das rotas atuais respondem com o mesmo status e o mesmo formato pela entrada única, verificados pela suíte de testes existente.
+- **SC-001**: 100% das rotas atuais respondem com o mesmo status e o mesmo formato pela entrada única, verificados por testes ponta a ponta que percorrem todas as rotas.
 - **SC-002**: Com pagamentos, relatórios de vendas e notificações fora do ar ao mesmo tempo, 100% das operações de pedido continuam funcionando.
 - **SC-003**: Com o catálogo ou o serviço de pedidos fora do ar, a finalização da compra falha com mensagem clara em até 5 segundos, e 100% dos carrinhos ficam intactos.
 - **SC-004**: Em testes de repetição da finalização da compra após falha, nenhum pedido é duplicado.
@@ -189,15 +194,19 @@ O que resta do sistema único é o serviço de pedidos. Ao fim desta etapa, o si
 - **SC-006**: Cada etapa termina com a suíte completa verde, sem perder nenhuma capacidade que existia antes dela.
 - **SC-007**: Nenhum usuário logado antes da troca do mecanismo de credencial precisa entrar de novo por causa dela.
 - **SC-008**: Ao fim da última etapa, o ciclo completo de compra funciona sem o sistema único.
-- **SC-009**: 100% das chamadas feitas direto a um serviço, sem passar pela entrada única e sem credencial válida, são recusadas.
+- **SC-009**: 100% das chamadas feitas direto a um serviço, sem passar pela entrada única, a rotas que exigem credencial e sem credencial válida, são recusadas.
 - **SC-010**: Em 100% das falhas provocadas nos testes de finalização da compra, o caminho da requisição mostra o serviço em que ela parou, sem consultar os registros de cada serviço separadamente.
 - **SC-011**: Em testes com um consumidor da versão anterior, 100% dos fatos publicados com informação acrescentada continuam sendo processados.
 - **SC-012**: 100% das rotas públicas aparecem na página única de documentação da entrada única.
+- **SC-013**: Com 50 clientes simultâneos durante 5 minutos, 95% das finalizações de compra respondem em até 1 segundo, e menos de 1% das requisições falha.
+- **SC-014**: Com a mesma carga, 95% das consultas à vitrine respondem em até 300 milissegundos.
+- **SC-015**: No fim da migração, o tempo de resposta de 95% das finalizações de compra é no máximo o dobro do medido na linha de base.
 
 ## Assumptions
 
 - A motivação é aprender e demonstrar arquitetura distribuída num projeto de portfólio, não uma necessidade de escala.
-- A API pública atual é o contrato. Nenhuma rota, formato ou status muda nesta feature.
+- A API pública atual é o contrato: nenhuma rota existente muda de caminho, formato ou status. A feature acrescenta `POST /admin/sales/rebuild`, o cabeçalho opcional `Idempotency-Key` em `POST /orders` e rotas internas que a entrada única não expõe, e troca a opção de inicialização que reconstruía os relatórios pela rota nova.
+- O teste de carga roda na máquina de desenvolvimento, com todos os serviços no mesmo computador. Os números valem como comparação entre a linha de base e o fim da migração, não como capacidade de produção; o README registra a máquina usada.
 - O serviço de notificações é especificado à parte, em `specs/002-notificacoes`, e é o primeiro a nascer fora do sistema único, logo depois da User Story 1.
 - Carrinho e pedidos são serviços separados, mesmo com o custo de a finalização da compra atravessar dois serviços.
 - Não há ambiente de produção com usuários reais. Uma etapa pode exigir parar o sistema por alguns minutos.

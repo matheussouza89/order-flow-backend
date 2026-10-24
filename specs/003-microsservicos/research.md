@@ -6,7 +6,8 @@ constituição 1.1.0, este arquivo é o registro das decisões difíceis de desf
 Versões conferidas em 2026-10-22: Spring Boot 4.1.1 (parent do projeto), Spring
 Cloud 2025.1.3 (start.spring.io: compatível com Boot `>=4.0.0` e `<4.2.0-M1`),
 Spring Cloud Gateway 5.0.3, Spring AMQP 4.1.1, springdoc-openapi 3.1.1,
-Resilience4j 2.3.0, Testcontainers 2.0.5.
+Resilience4j 2.3.0, Testcontainers 2.0.5. Em 2026-10-24: Gatling 3.16.0 e
+`gatling-maven-plugin` 4.21.12.
 
 ## R0. Separar em microsserviços
 
@@ -55,11 +56,17 @@ Resilience4j 2.3.0, Testcontainers 2.0.5.
 - **Decisão**: um repositório, Maven multi-módulo. Módulos: `platform/platform-web`,
   `platform/platform-security`, `platform/platform-messaging`,
   `platform/platform-outbox`, `platform/platform-test`, `contracts`, `gateway`,
-  `services/<serviço>`, `monolith` (temporário) e `e2e`. O `platform` é dividido
-  para que cada serviço dependa só do que usa: o gateway não pode carregar o
-  resource server, e serviços sem JPA ou sem RabbitMQ não podem carregar o outbox
-  ou a mensageria. Com módulos separados, nenhuma configuração precisa ser
-  condicional.
+  `services/<serviço>`, `monolith` (temporário), `e2e` e `load`. O `platform` é
+  dividido para que cada serviço dependa só do que usa: o gateway não pode
+  carregar o resource server, e serviços sem JPA ou sem RabbitMQ não podem
+  carregar o outbox ou a mensageria. Com módulos separados, a única configuração
+  condicional é o `JwtDecoder` do `platform-security`, registrado como
+  auto-configuração com `@ConditionalOnMissingBean`, porque o emissor valida com
+  a própria chave até a US6. O `platform` não conhece domínio (princípio V): o
+  `platform-web` só tem exceções genéricas por status (404, 400, 409, 401 e 503),
+  e as exceções de uma funcionalidade ficam no serviço, estendendo a genérica; o
+  `platform-messaging` não depende de `contracts` e recebe de cada serviço o mapa
+  de ids de tipo.
 - **Motivo**: um build, um CI e um histórico; o portfólio mostra a arquitetura
   inteira num lugar. O Maven já é a ferramenta do projeto.
 - **Alternativas consideradas**: um repositório por serviço, que exige versionar e
@@ -165,7 +172,9 @@ Resilience4j 2.3.0, Testcontainers 2.0.5.
   própria fila, como hoje. A DLX e a DLQ compartilhadas são declaradas pelo
   `platform`. O tipo da mensagem passa a ser um id lógico com versão
   (`order.confirmed.v1`), mapeado pelo `DefaultJacksonJavaTypeMapper`, que aceita
-  também os nomes de classe antigos durante a transição. Uma versão nova de
+  também os nomes de classe antigos durante a transição. O mapa vem de um bean
+  `FactTypes` que cada serviço declara a partir de `contracts`, para que o
+  `platform-messaging` não conheça os fatos. Uma versão nova de
   formato ganha id e chave de roteamento próprios, publicada junto com a antiga
   até os consumidores migrarem (FR-018).
 - **Motivo**: com o nome da classe Java no cabeçalho, mover um evento de pacote
@@ -283,8 +292,27 @@ Resilience4j 2.3.0, Testcontainers 2.0.5.
   que exigiria auto-configuração em cada módulo do `platform`; um pacote raiz novo
   por serviço, que renomeia tudo sem ganho.
 
+## R18. Teste de carga
+
+- **Decisão**: Gatling 3.16.0 com a DSL em Java, num módulo `load` com o
+  `gatling-maven-plugin` 4.21.12. Uma simulação, `PurchaseSimulation`, cria os
+  produtos e os usuários antes da carga e roda 50 clientes simultâneos por 5
+  minutos pela entrada única: vitrine, carrinho, finalização e consulta de
+  pedidos. As asserções da simulação são o SC-013 e o SC-014, então o build falha
+  quando a meta não é atingida. A linha de base é medida depois da US1 (monólito
+  atrás do gateway) e a medição final no fim da migração, com o mesmo cenário,
+  para isolar o custo da separação (SC-015). No CI, um workflow manual roda a
+  simulação com carga reduzida e só verifica a taxa de falhas.
+- **Motivo**: fica no mesmo ecossistema Java e Maven do projeto, as asserções
+  transformam as metas em teste, e o relatório HTML serve de evidência no
+  portfólio. Medir antes e depois, na mesma máquina, é o que dá sentido aos
+  números de uma execução local.
+- **Alternativas consideradas**: k6 (bom e leve, mas traz JavaScript ao
+  projeto); JMeter (plano em XML e interface gráfica, pesado de manter);
+  rodar a carga no CI a cada PR (os runners compartilhados variam demais para
+  medir latência, e a memória já é um risco do plano).
+
 ## Pendências
 
-- **Meta de tempo de resposta na operação normal**: não definida na clarificação
-  (baixo impacto no escopo local). O único limite é o de falha do checkout
-  (SC-003).
+Nenhuma. A meta de tempo de resposta na operação normal, pendente depois da
+clarificação, foi definida no SC-013 e no SC-014 (R18).

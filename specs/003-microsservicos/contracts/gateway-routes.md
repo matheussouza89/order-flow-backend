@@ -43,9 +43,13 @@ formato de sempre (`status`, `message`, `errors`):
 | Situação | Status | `message` |
 |---|---|---|
 | conexão recusada ou serviço fora do ar | 503 | serviço indisponível |
-| tempo de resposta esgotado | 504 | serviço não respondeu a tempo |
+| tempo de resposta esgotado (4,5 s) | 504 | serviço não respondeu a tempo |
 
 Erros produzidos pelos serviços (400, 401, 403, 404, 409) passam sem alteração.
+
+O tempo de espera de 4,5 s fica acima dos 3,5 s da cadeia do checkout, para que o
+cliente receba o 503 do serviço e não um 504 da entrada, e abaixo dos 5 s do
+SC-003.
 
 ## Credencial
 

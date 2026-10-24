@@ -9,8 +9,12 @@ separação acrescenta. Decisões em [research.md](../research.md), R5, R6, R7 e
   O serviço chamado valida a credencial e aplica as mesmas regras de acesso de uma
   requisição externa.
 - O cabeçalho `traceparent` é propagado pela biblioteca de rastreamento (FR-016).
-- Falha ou demora do serviço chamado vira 503 em `ErrorResponse` para quem chamou,
-  dentro do tempo da cadeia (SC-003).
+- Falha de conexão, tempo esgotado ou 5xx do serviço chamado vira 503 em
+  `ErrorResponse` para quem chamou, dentro do tempo da cadeia (SC-003).
+- Uma resposta 4xx do serviço chamado chega a quem chamou com o mesmo status e o
+  mesmo `ErrorResponse`, e não conta como falha no circuit breaker. Assim, uma
+  credencial expirada no meio do checkout continua sendo 401, e um 409 continua
+  sendo 409.
 
 | Chamada | Timeout | Circuit breaker |
 |---|---|---|

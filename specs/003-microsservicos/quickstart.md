@@ -111,6 +111,20 @@ Faça login antes de implantar a User Story 1 e guarde o refresh token. Depois d
 implantação, use o token de acesso antigo. Esperado: `401`. Chame
 `POST /auth/refresh` com o refresh token. Esperado: um par novo, sem senha.
 
+## 11. Teste de carga (SC-013 a SC-015)
+
+Com o Compose de pé:
+
+```bash
+./mvnw -pl load gatling:test
+```
+
+Esperado: a simulação cria produtos e usuários, roda 50 clientes simultâneos por
+5 minutos pela porta 8080 e passa nas asserções: p95 da finalização até 1 s, p95
+da vitrine até 300 ms e menos de 1% de falhas. O relatório HTML fica em
+`load/target/gatling/`. No fim da migração, o p95 da finalização é comparado com
+a linha de base registrada no README (no máximo o dobro).
+
 ## Encerrar
 
 ```bash
