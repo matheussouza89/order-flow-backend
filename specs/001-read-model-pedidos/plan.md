@@ -92,7 +92,9 @@ versão do Spring Boot 4. Na T5, confirmados no classpath: no Spring AMQP 4.1.1,
 para `org.springframework.boot.amqp.autoconfigure`. Confirmado na T6: `spring-boot-starter-data-mongodb`
 (com o `-test` correspondente) e `org.testcontainers:testcontainers-mongodb`, com a
 classe `org.testcontainers.mongodb.MongoDBContainer`. A imagem de teste é
-`mongo:8`, fixada na versão principal, enquanto os demais containers usam `latest`.
+`mongo:7`, fixada na versão principal, enquanto os demais containers usam `latest`.
+Começou como `mongo:8` e foi trocada porque o MongoDB 8 se recusa a iniciar em
+kernel Linux de 6.19 a 7.0.13, que parte dos runners do CI já usa.
 
 ## Riscos e conflitos encontrados na análise
 

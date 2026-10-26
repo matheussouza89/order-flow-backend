@@ -753,6 +753,22 @@ numa tabela do próprio MySQL foi considerada e fica registrada no
 [ADR 0001](docs/adr/0001-read-model-pedidos-mongodb.md), junto com a
 [especificação](specs/001-read-model-pedidos/spec.md).
 
+A imagem é `mongo:7`, não a 8. O MongoDB 8 embute uma versão do TCMalloc
+incompatível com o kernel Linux de 6.19 a 7.0.13 e, nesse intervalo, se recusa
+a iniciar ([SERVER-121912](https://jira.mongodb.org/browse/SERVER-121912)).
+Parte dos runners do GitHub já usa esse kernel, então o CI falhava de forma
+intermitente. Na máquina local nunca falhou, porque o Docker Desktop roda no
+kernel do WSL2, que é anterior. A projeção não usa nada que exija a 8, e a volta
+para ela fica para quando o kernel dos runners passar de 7.0.13 ou sair uma
+versão corrigida.
+
+O container de teste espera o log `Waiting for connections` em vez da porta,
+que é a espera padrão do Testcontainers. Com a espera pela porta, um `mongod`
+que encerrava logo depois de abrir a porta só aparecia mais tarde, como
+`MongoDBContainer should be started first`, sem pista da causa. Com a espera
+pelo log, a falha sai no próprio start do container, com o código de saída do
+`mongod`.
+
 ## Endpoints
 
 **Contas**
