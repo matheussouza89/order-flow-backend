@@ -207,7 +207,7 @@ O que resta do sistema único é o serviço de pedidos. Ao fim desta etapa, o si
 - A motivação é aprender e demonstrar arquitetura distribuída num projeto de portfólio, não uma necessidade de escala.
 - A API pública atual é o contrato: nenhuma rota existente muda de caminho, formato ou status. A feature acrescenta `POST /admin/sales/rebuild`, o cabeçalho opcional `Idempotency-Key` em `POST /orders` e rotas internas que a entrada única não expõe, e troca a opção de inicialização que reconstruía os relatórios pela rota nova.
 - O teste de carga roda na máquina de desenvolvimento, com todos os serviços no mesmo computador. Os números valem como comparação entre a linha de base e o fim da migração, não como capacidade de produção; o README registra a máquina usada.
-- O serviço de notificações é especificado à parte, em `specs/002-notificacoes`, e é o primeiro a nascer fora do sistema único, logo depois da User Story 1.
+- O serviço de notificações é especificado à parte, em `specs/002-notificacoes`, e nasce fora do sistema único depois da User Story 1, de preferência logo em seguida. Os critérios que citam notificações (SC-002 e o cenário 2 da User Story 7) só fecham quando ele existir.
 - Carrinho e pedidos são serviços separados, mesmo com o custo de a finalização da compra atravessar dois serviços.
 - Não há ambiente de produção com usuários reais. Uma etapa pode exigir parar o sistema por alguns minutos.
 - Os serviços rodam na máquina local e no CI. Implantar em orquestrador de containers ou em nuvem fica fora desta feature e pode ser uma feature seguinte.

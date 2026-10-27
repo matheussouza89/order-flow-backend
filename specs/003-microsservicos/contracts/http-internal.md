@@ -8,13 +8,18 @@ separação acrescenta. Decisões em [research.md](../research.md), R5, R6, R7 e
 - A chamada leva o cabeçalho `Authorization` da requisição que a originou (FR-014).
   O serviço chamado valida a credencial e aplica as mesmas regras de acesso de uma
   requisição externa.
-- O cabeçalho `traceparent` é propagado pela biblioteca de rastreamento (FR-016).
+- O cabeçalho `traceparent` é propagado pela biblioteca de rastreamento (FR-016),
+  com o cliente criado a partir do `RestClient.Builder` do Boot.
 - Falha de conexão, tempo esgotado ou 5xx do serviço chamado vira 503 em
   `ErrorResponse` para quem chamou, dentro do tempo da cadeia (SC-003).
 - Uma resposta 4xx do serviço chamado chega a quem chamou com o mesmo status e o
-  mesmo `ErrorResponse`, e não conta como falha no circuit breaker. Assim, uma
-  credencial expirada no meio do checkout continua sendo 401, e um 409 continua
-  sendo 409.
+  mesmo `ErrorResponse`, não conta como falha no circuit breaker e não passa pelo
+  fallback. Assim, uma credencial expirada no meio do checkout continua sendo 401,
+  e um 409 continua sendo 409.
+- A finalização no `cart` tem prazo de 4 s, contado do início. O `cart` não chama
+  o `orders` se o prazo já passou e não apaga o carrinho se ele passou durante a
+  chamada. Nos dois casos responde 503 e guarda a `checkoutKey`, e a repetição
+  devolve o mesmo pedido, se ele chegou a ser criado (R6).
 
 | Chamada | Timeout | Circuit breaker |
 |---|---|---|

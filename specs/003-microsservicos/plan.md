@@ -36,8 +36,8 @@ Gatling 3.16.0 no módulo `load` (R18).
 **Target Platform**: containers Linux com Docker Compose, na máquina local e no
 GitHub Actions (`ubuntu-latest`)
 
-**Project Type**: serviços web: um gateway, sete serviços e duas bibliotecas
-internas
+**Project Type**: serviços web: um gateway e sete serviços, com as bibliotecas
+internas `platform-*` e `contracts` e os módulos de teste `e2e` e `load`
 
 **Performance Goals**: com 50 clientes simultâneos por 5 minutos, p95 da
 finalização até 1 s, p95 da vitrine até 300 ms e menos de 1% de falhas (SC-013,
@@ -50,8 +50,9 @@ do checkout em até 5 s (SC-003).
 e a infraestrutura
 
 **Scale/Scope**: 8 aplicações (gateway, `identity`, `catalog`, `cart`, `orders`,
-`payment`, `sales` e `notifications`, esta pela spec 002); 365 testes de hoje
-(231 unitários e 134 de integração) redistribuídos; 7 etapas
+`payment`, `sales` e `notifications`, esta pela spec 002); 367 testes de hoje
+(232 unitários e 135 de integração, com o teste de contexto contado como
+integração) redistribuídos; 7 etapas
 
 ## Constitution Check
 
@@ -59,7 +60,7 @@ e a infraestrutura
 
 | Princípio | Antes da pesquisa | Depois do desenho |
 |---|---|---|
-| I. Decisões têm motivo escrito | Passa: decisões vão para o research.md (constituição 1.1.0) | Passa: R0 a R17 com motivo e alternativas |
+| I. Decisões têm motivo escrito | Passa: decisões vão para o research.md (constituição 1.1.0) | Passa: R0 a R18 com motivo e alternativas |
 | II. Menos código | Violação justificada: oito aplicações em vez de uma | Mantida e justificada em Complexity Tracking; a biblioteca resolve cliente HTTP, circuit breaker, gateway e rastreamento (R3, R6, R11) |
 | III. Teste em toda mudança | Passa: os testes acompanham o código | Passa: testes de contrato dos fatos e módulo `e2e` para os critérios entre serviços (R15) |
 | IV. O domínio decide | Passa: entidades mudam de módulo sem mudar de regra | Passa |
@@ -137,13 +138,13 @@ Cada user story é uma etapa, entregue e testada sozinha (FR-013).
 
 | Etapa | O que muda |
 |---|---|
-| Base | Multi-módulo com `monolith`, `platform`, `contracts`, `gateway`, `e2e` e `load`. `shared/` vira `platform`, sem domínio. Tipo lógico nos fatos. `traceparent` no outbox. Zipkin. `Dockerfile` com `ARG MODULE` e job `e2e` no CI. |
-| US1 | RS256 e JWKS no `monolith`. Gateway com rota padrão para o `monolith`, timeout de 4,5 s, erros 503 e 504, página única de documentação. Compose com o gateway na frente. Linha de base do teste de carga. |
-| 002 | `services/notifications`, pela spec própria. |
+| Base | Multi-módulo com `monolith`, `platform`, `contracts`, `gateway` e `e2e`. `shared/` vira `platform`, sem domínio. Tipo lógico nos fatos. `traceparent` no outbox. Zipkin. `Dockerfile` com `ARG MODULE` e job `e2e` no CI. |
+| US1 | RS256 e JWKS no `monolith`. Gateway com rota padrão para o `monolith`, timeout de 4,5 s, erros 503 e 504, página única de documentação. Compose com o gateway na frente. Módulo `load` e linha de base do teste de carga. |
+| 002 | `services/notifications`, pela spec própria, de preferência logo depois da US1. |
 | US2 | `services/sales`. O `monolith` ganha `GET /internal/orders/export`; o `sales` ganha `POST /admin/sales/rebuild`. O pacote `sales` sai do `monolith`. |
 | US3 | `services/payment`. `RENAME TABLE` de `payments`. O pacote `payment` sai do `monolith`. |
 | US4 | `services/catalog`. `RENAME TABLE` de `products`. Carrinho e pedidos, ainda no `monolith`, passam a chamar o `catalog` por HTTP. |
-| US5 | `services/cart`. `POST /orders` aceita `Idempotency-Key`. O `cart` chama o `catalog` e o `monolith` por HTTP. |
+| US5 | `services/cart`. `POST /orders` aceita `Idempotency-Key`. O `cart` chama o `catalog` e o `monolith` por HTTP. A finalização tem prazo de 4 s (R6). |
 | US6 | `services/identity`. `RENAME TABLE` de `users`; refresh tokens com usuário de ACL próprio. O JWKS sai do `monolith`. |
 | US7 | O `monolith` vira `services/orders`. `RENAME TABLE` de `orders`, `order_items` e `outbox_messages`. A rota padrão do gateway deixa de existir. |
 | Fim | Medição final de carga com o mesmo cenário, comparada com a linha de base (SC-015). |

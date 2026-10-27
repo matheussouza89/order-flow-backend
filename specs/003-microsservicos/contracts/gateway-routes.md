@@ -35,6 +35,9 @@ Uma requisição a essas rotas pela entrada única recebe 404 em `ErrorResponse`
 | `/swagger-ui.html` | página única, com uma entrada por serviço (FR-020) |
 | `/v3/api-docs/{serviço}` | documento OpenAPI do serviço, buscado pela entrada única |
 
+As rotas que a entrada não repassa ficam fora dos documentos dos serviços
+(`springdoc.paths-to-exclude`), para que a página não mostre rota que responde 404.
+
 ## Erros da própria entrada
 
 Quando o serviço de destino não responde, a entrada devolve `ErrorResponse` no
@@ -47,9 +50,11 @@ formato de sempre (`status`, `message`, `errors`):
 
 Erros produzidos pelos serviços (400, 401, 403, 404, 409) passam sem alteração.
 
-O tempo de espera de 4,5 s fica acima dos 3,5 s da cadeia do checkout, para que o
-cliente receba o 503 do serviço e não um 504 da entrada, e abaixo dos 5 s do
-SC-003.
+O tempo de espera de 4,5 s fica abaixo dos 5 s do SC-003 e acima do prazo de 4 s
+da finalização no `cart`, para que, no caso comum, o cliente receba o 503 do
+serviço e não um 504 da entrada. Se a entrada responder 504 antes, o carrinho fica
+como estava e a repetição devolve o mesmo pedido ([research.md](../research.md),
+R6).
 
 ## Credencial
 

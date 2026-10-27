@@ -120,18 +120,42 @@ Resilience4j 2.3.0, Testcontainers 2.0.5. Em 2026-10-24: Gatling 3.16.0 e
 
 - **Decisão**: interfaces HTTP declarativas do Spring Framework 7
   (`@HttpExchange`) sobre `RestClient`, com URL base e timeouts por configuração.
-  Um interceptor em `platform` repassa o cabeçalho `Authorization` da requisição
+  O `RestClient` sai do `RestClient.Builder` do Boot, que já aplica a observação
+  do rastreamento; um cliente criado à mão não propaga o `traceparent`. Um
+  interceptor em `platform` repassa o cabeçalho `Authorization` da requisição
   recebida (FR-014). Circuit breaker do Resilience4j, já usado no gateway de
-  pagamento. Timeouts: 1,5 s para o `catalog`; 3,5 s do `cart` para o `orders`,
-  que inclui a chamada do `orders` ao `catalog`. O total fica abaixo dos 5 s do
-  SC-003. URLs por DNS do Docker Compose, sem descoberta de serviços. Os nomes das
-  propriedades dos clientes HTTP do Boot 4 devem ser conferidos no classpath.
+  pagamento, com `ignore-exceptions: HttpClientErrorException` e fallback
+  declarado só para falha de conexão, tempo esgotado, 5xx e circuito aberto. O
+  `ignore-exceptions` só tira a exceção da contagem, e o fallback é escolhido pelo
+  tipo da exceção: um fallback genérico transformaria um 4xx em 503. Timeouts:
+  1,5 s por chamada ao `catalog` e 3,5 s do `cart` para o `orders`. URLs por DNS
+  do Docker Compose, sem descoberta de serviços. Os nomes das propriedades dos
+  clientes HTTP do Boot 4 devem ser conferidos no classpath.
+- **Prazo da finalização**: a finalização consulta o `catalog` uma vez por item
+  no `cart`, antes de criar o pedido, e de novo no `orders`, ao criá-lo. A soma
+  cresce com o número de itens e pode passar dos 4,5 s da entrada única, que então
+  responde 504 enquanto o `cart` segue, cria o pedido e esvazia o carrinho: o
+  cliente vê erro com o pedido criado. Por isso a finalização no `cart` tem prazo
+  próprio de 4 s, contado do início. O `cart` não chama o `orders` se o prazo já
+  passou e não apaga o carrinho se ele passou durante a chamada. Nos dois casos
+  responde 503 e guarda a `checkoutKey`, e a repetição devolve o mesmo pedido, se
+  ele chegou a ser criado. Se a entrada responder 504 antes, o estado é o mesmo. A
+  entrada garante a resposta em até 4,5 s, abaixo dos 5 s do SC-003.
 - **Motivo**: a biblioteca já resolve cliente, timeout e circuit breaker
   (princípio II). Com a execução restrita à máquina local e ao CI, o DNS do Compose
   basta.
 - **Alternativas consideradas**: OpenFeign (dependência a mais, em manutenção);
   Eureka ou Consul (descoberta sem necessidade no escopo local); credencial do
-  próprio serviço (opção B da clarificação, descartada).
+  próprio serviço (opção B da clarificação, descartada). Para o prazo: timeouts
+  menores (a soma continua crescendo com os itens); uma consulta só ao `catalog`
+  com todos os ids (rota nova e mudança maior no catálogo); tirar a pré-checagem
+  do `cart` (o produto indisponível passaria a responder como o `POST /orders`, e
+  não com o 409 de hoje, contra o FR-001).
+- **Limite conhecido**: entre a US4 e a US5, a finalização ainda roda inteira no
+  `monolith`, sem chave de idempotência. Com o catálogo lento, mas abaixo do
+  timeout, num carrinho com muitos itens, a entrada pode responder 504 depois de o
+  pedido ser criado, e a repetição encontra o carrinho vazio. A US5 fecha a janela
+  com o prazo e a `checkoutKey`.
 
 ## R7. Checkout sem pedido duplicado
 
@@ -302,7 +326,9 @@ Resilience4j 2.3.0, Testcontainers 2.0.5. Em 2026-10-24: Gatling 3.16.0 e
   quando a meta não é atingida. A linha de base é medida depois da US1 (monólito
   atrás do gateway) e a medição final no fim da migração, com o mesmo cenário,
   para isolar o custo da separação (SC-015). No CI, um workflow manual roda a
-  simulação com carga reduzida e só verifica a taxa de falhas.
+  simulação com carga reduzida e só verifica a taxa de falhas: as asserções de
+  tempo são desligadas por `-DcheckLatency=false`, porque o runner compartilhado
+  não dá tempos comparáveis.
 - **Motivo**: fica no mesmo ecossistema Java e Maven do projeto, as asserções
   transformam as metas em teste, e o relatório HTML serve de evidência no
   portfólio. Medir antes e depois, na mesma máquina, é o que dá sentido aos
