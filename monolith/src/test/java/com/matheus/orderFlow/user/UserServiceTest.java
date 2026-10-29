@@ -1,9 +1,6 @@
 package com.matheus.orderFlow.user;
 
 import com.matheus.orderFlow.shared.exception.DomainValidationException;
-import com.matheus.orderFlow.shared.security.RefreshTokenService;
-import com.matheus.orderFlow.shared.security.RotatedToken;
-import com.matheus.orderFlow.shared.security.TokenService;
 import com.matheus.orderFlow.shared.exception.NotFoundException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

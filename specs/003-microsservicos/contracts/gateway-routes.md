@@ -13,10 +13,14 @@ status de hoje não mudam. Decisões em [research.md](../research.md), R3, R4 e 
 | `/cart/**` | `cart` | US5 |
 | `/auth/**`, `/users/**` | `identity` | US6 |
 | `/orders/**` | `orders` | US7 |
-| qualquer outro | `monolith` | até a US7, quando deixa de existir |
 
 Antes da etapa indicada, o prefixo vai para o `monolith`. A troca de destino é uma
 mudança de configuração do gateway, sem mudança para o cliente.
+
+O gateway só roteia os prefixos da API. Não há rota padrão: um caminho fora da
+tabela recebe 404 em `ErrorResponse` da própria entrada. Uma rota `/**` para o
+`monolith` exporia também as rotas internas e tomaria a página de documentação do
+próprio gateway.
 
 ## Rotas que o gateway não repassa
 
@@ -26,7 +30,9 @@ mudança de configuração do gateway, sem mudança para o cliente.
 | `/.well-known/jwks.json` | consultada pelos serviços na rede interna |
 | `/actuator/**` dos serviços | saúde de cada serviço, só na rede interna |
 
-Uma requisição a essas rotas pela entrada única recebe 404 em `ErrorResponse`.
+Nenhuma delas está na tabela de prefixos, então uma requisição a elas pela entrada
+única recebe 404 em `ErrorResponse`. O `/actuator/health` do próprio gateway
+responde normalmente.
 
 ## Documentação
 
@@ -45,8 +51,14 @@ formato de sempre (`status`, `message`, `errors`):
 
 | Situação | Status | `message` |
 |---|---|---|
-| conexão recusada ou serviço fora do ar | 503 | serviço indisponível |
-| tempo de resposta esgotado (4,5 s) | 504 | serviço não respondeu a tempo |
+| conexão recusada ou serviço fora do ar | 503 | `Service unavailable` |
+| tempo de resposta esgotado (4,5 s) | 504 | `Service did not respond in time` |
+
+O gateway preserva o cabeçalho `Host` da requisição. O serviço monta o `Location`
+das respostas 201 e o endereço da documentação como montava antes da entrada
+única, sem confiar em `X-Forwarded-*`, que o gateway descarta quando vêm do
+cliente. O cliente HTTP do gateway é o Apache HttpClient 5: o do JDK proíbe definir
+o `Host` e tenta subir para HTTP/2 (h2c), o que cancela chamadas com corpo.
 
 Erros produzidos pelos serviços (400, 401, 403, 404, 409) passam sem alteração.
 

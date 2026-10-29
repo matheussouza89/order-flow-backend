@@ -1,9 +1,6 @@
 package com.matheus.orderFlow.user;
 
 import com.matheus.orderFlow.shared.exception.NotFoundException;
-import com.matheus.orderFlow.shared.security.RefreshTokenService;
-import com.matheus.orderFlow.shared.security.RotatedToken;
-import com.matheus.orderFlow.shared.security.TokenService;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

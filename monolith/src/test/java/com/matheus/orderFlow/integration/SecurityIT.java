@@ -1,15 +1,31 @@
 package com.matheus.orderFlow.integration;
 
+import com.matheus.orderFlow.user.TokenService;
+import com.nimbusds.jose.jwk.JWKSet;
+import com.nimbusds.jose.jwk.RSAKey;
+import com.nimbusds.jose.jwk.gen.RSAKeyGenerator;
+import com.nimbusds.jose.jwk.source.ImmutableJWKSet;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
+import org.springframework.security.oauth2.jwt.JwsHeader;
+import org.springframework.security.oauth2.jwt.JwtClaimsSet;
+import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
+import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 import org.springframework.security.web.FilterChainProxy;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
 
+import javax.crypto.SecretKey;
+import javax.crypto.spec.SecretKeySpec;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -310,6 +326,41 @@ class SecurityIT extends AbstractIntegrationTest {
         String tampered = parts[0] + "." + parts[1] + "." + parts[2].substring(1) + "X";
 
         mockMvc.perform(get("/orders").header(HttpHeaders.AUTHORIZATION, "Bearer " + tampered))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void shouldRejectATokenSignedWithAnotherRsaKey() throws Exception {
+        RSAKey foreignKey = new RSAKeyGenerator(2048).keyIDFromThumbprint(true).generate();
+        String foreignToken = new TokenService(
+                new NimbusJwtEncoder(new ImmutableJWKSet<>(new JWKSet(foreignKey))),
+                Duration.ofMinutes(15))
+                .generateToken(UUID.randomUUID(), "ADMIN");
+
+        mockMvc.perform(get("/orders").header(HttpHeaders.AUTHORIZATION, "Bearer " + foreignToken))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void shouldRejectAnHs256TokenSignedWithTheOldSecret() throws Exception {
+        SecretKey oldSecret = new SecretKeySpec(
+                "local-development-secret-change-in-production".getBytes(StandardCharsets.UTF_8),
+                "HmacSHA256");
+        String hs256Token = NimbusJwtEncoder.withSecretKey(oldSecret)
+                .algorithm(MacAlgorithm.HS256)
+                .build()
+                .encode(JwtEncoderParameters.from(
+                        JwsHeader.with(MacAlgorithm.HS256).build(),
+                        JwtClaimsSet.builder()
+                                .issuer("orderflow")
+                                .subject(UUID.randomUUID().toString())
+                                .claim("roles", List.of("ADMIN"))
+                                .issuedAt(Instant.now())
+                                .expiresAt(Instant.now().plus(Duration.ofMinutes(15)))
+                                .build()))
+                .getTokenValue();
+
+        mockMvc.perform(get("/orders").header(HttpHeaders.AUTHORIZATION, "Bearer " + hs256Token))
                 .andExpect(status().isUnauthorized());
     }
 

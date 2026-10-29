@@ -1,4 +1,4 @@
-package com.matheus.orderFlow.shared.security;
+package com.matheus.orderFlow.user;
 
 import lombok.Getter;
 import org.springframework.data.annotation.Id;

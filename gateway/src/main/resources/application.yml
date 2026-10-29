@@ -1,0 +1,41 @@
+spring:
+  application:
+    name: gateway
+
+  http:
+    clients:
+      connect-timeout: 1s
+      read-timeout: 4500ms
+
+  cloud:
+    gateway:
+      server:
+        webmvc:
+          routes:
+            - id: monolith
+              uri: ${MONOLITH_URL:http://monolith:8080}
+              predicates:
+                - Path=/auth/**,/users/**,/products/**,/cart/**,/orders/**,/payments/**,/admin/sales/**
+              filters:
+                - PreserveHostHeader
+            - id: monolith-docs
+              uri: ${MONOLITH_URL:http://monolith:8080}
+              predicates:
+                - Path=/v3/api-docs/monolith
+              filters:
+                - PreserveHostHeader
+                - SetPath=/v3/api-docs
+
+management:
+  tracing:
+    sampling:
+      probability: 1.0
+    export:
+      zipkin:
+        endpoint: ${ZIPKIN_ENDPOINT:http://localhost:9411/api/v2/spans}
+
+springdoc:
+  swagger-ui:
+    urls:
+      - name: monolith
+        url: /v3/api-docs/monolith

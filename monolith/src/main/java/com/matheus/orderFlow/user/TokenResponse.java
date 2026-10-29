@@ -4,7 +4,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 
 @Schema(description = "Access token issued on a successful login.")
 public record TokenResponse(
-        @Schema(description = "Signed JWT", example = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ...")
+        @Schema(description = "JWT signed with RS256", example = "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJ...")
         String token,
 
         @Schema(description = "Scheme to use in the Authorization header", example = "Bearer")

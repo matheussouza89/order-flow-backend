@@ -1,11 +1,34 @@
 
 services:
-  app:
+  gateway:
+    build:
+      context: .
+      args:
+        MODULE: gateway
+    restart: unless-stopped
+    environment:
+      MONOLITH_URL: http://monolith:8080
+      ZIPKIN_ENDPOINT: http://zipkin:9411/api/v2/spans
+      JAVA_TOOL_OPTIONS: -Xmx256m
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "-fs", "http://localhost:8080/actuator/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 20s
+    depends_on:
+      monolith:
+        condition: service_healthy
+    networks:
+      - orderflow-network
+
+  monolith:
     build:
       context: .
       args:
         MODULE: monolith
-    container_name: orderflow-app
     restart: unless-stopped
     environment:
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/orderflow
@@ -17,10 +40,14 @@ services:
       PAYMENT_GATEWAY_URL: http://wiremock:8080
       ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@orderflow.local}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-change-me-in-production}
-      JWT_SECRET: ${JWT_SECRET:-local-development-secret-change-in-production}
       ZIPKIN_ENDPOINT: http://zipkin:9411/api/v2/spans
-    ports:
-      - "8080:8080"
+      JAVA_TOOL_OPTIONS: -Xmx256m
+    healthcheck:
+      test: ["CMD", "curl", "-fs", "http://localhost:8080/actuator/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 40
+      start_period: 30s
     depends_on:
       mysql:
         condition: service_healthy
@@ -35,7 +62,6 @@ services:
 
   wiremock:
     image: wiremock/wiremock:3.9.1
-    container_name: orderflow-wiremock
     restart: unless-stopped
     command: ["--global-response-templating", "--verbose"]
     volumes:
@@ -47,7 +73,6 @@ services:
 
   mysql:
     image: mysql:8.4
-    container_name: orderflow-mysql
     restart: unless-stopped
     environment:
       MYSQL_DATABASE: orderflow
@@ -69,7 +94,6 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: orderflow-redis
     restart: unless-stopped
     ports:
       - "6379:6379"
@@ -80,7 +104,6 @@ services:
 
   mongo:
     image: mongo:7
-    container_name: orderflow-mongo
     restart: unless-stopped
     ports:
       - "27017:27017"
@@ -91,7 +114,6 @@ services:
 
   zipkin:
     image: openzipkin/zipkin
-    container_name: orderflow-zipkin
     restart: unless-stopped
     ports:
       - "9411:9411"
@@ -100,7 +122,6 @@ services:
 
   rabbitmq:
     image: rabbitmq:4-management
-    container_name: orderflow-rabbitmq
     restart: unless-stopped
     environment:
       RABBITMQ_DEFAULT_USER: orderflow

@@ -1,6 +1,5 @@
-package com.matheus.orderFlow.shared.security;
+package com.matheus.orderFlow.user;
 
-import com.matheus.orderFlow.user.InvalidLoginException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -17,14 +16,14 @@ import java.util.UUID;
 
 @Slf4j
 @Service
-public class RefreshTokenService {
+class RefreshTokenService {
     private static final int TOKEN_BYTES = 32;
 
     private final RefreshTokenRepository refreshTokenRepository;
     private final SecureRandom secureRandom = new SecureRandom();
     private final Duration expiration;
 
-    public RefreshTokenService(
+    RefreshTokenService(
             RefreshTokenRepository refreshTokenRepository,
             @Value("${orderflow.security.jwt.refresh-expiration}") Duration expiration) {
         this.refreshTokenRepository = refreshTokenRepository;

@@ -1,6 +1,6 @@
 package com.matheus.orderFlow.integration;
 
-import com.matheus.orderFlow.shared.security.TokenService;
+import com.matheus.orderFlow.user.TokenService;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.webmvc.test.autoconfigure.MockMvcBuilderCustomizer;
 import org.springframework.context.annotation.Bean;

@@ -139,14 +139,14 @@ Cada user story é uma etapa, entregue e testada sozinha (FR-013).
 | Etapa | O que muda |
 |---|---|
 | Base | Multi-módulo com `monolith`, `platform`, `contracts`, `gateway` e `e2e`. `shared/` vira `platform`, sem domínio. Tipo lógico nos fatos. `traceparent` no outbox. Zipkin. `Dockerfile` com `ARG MODULE` e job `e2e` no CI. |
-| US1 | RS256 e JWKS no `monolith`. Gateway com rota padrão para o `monolith`, timeout de 4,5 s, erros 503 e 504, página única de documentação. Compose com o gateway na frente. Módulo `load` e linha de base do teste de carga. |
+| US1 | RS256 e JWKS no `monolith`. Gateway com os prefixos da API apontando para o `monolith`, timeout de 4,5 s, erros 503 e 504, página única de documentação. Compose com o gateway na frente. Módulo `load` e linha de base do teste de carga. |
 | 002 | `services/notifications`, pela spec própria, de preferência logo depois da US1. |
 | US2 | `services/sales`. O `monolith` ganha `GET /internal/orders/export`; o `sales` ganha `POST /admin/sales/rebuild`. O pacote `sales` sai do `monolith`. |
 | US3 | `services/payment`. `RENAME TABLE` de `payments`. O pacote `payment` sai do `monolith`. |
 | US4 | `services/catalog`. `RENAME TABLE` de `products`. Carrinho e pedidos, ainda no `monolith`, passam a chamar o `catalog` por HTTP. |
 | US5 | `services/cart`. `POST /orders` aceita `Idempotency-Key`. O `cart` chama o `catalog` e o `monolith` por HTTP. A finalização tem prazo de 4 s (R6). |
 | US6 | `services/identity`. `RENAME TABLE` de `users`; refresh tokens com usuário de ACL próprio. O JWKS sai do `monolith`. |
-| US7 | O `monolith` vira `services/orders`. `RENAME TABLE` de `orders`, `order_items` e `outbox_messages`. A rota padrão do gateway deixa de existir. |
+| US7 | O `monolith` vira `services/orders`. `RENAME TABLE` de `orders`, `order_items` e `outbox_messages`. O gateway deixa de apontar para o `monolith`. |
 | Fim | Medição final de carga com o mesmo cenário, comparada com a linha de base (SC-015). |
 
 ## Riscos

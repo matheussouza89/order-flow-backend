@@ -15,12 +15,13 @@ spring:
   flyway:
     enabled: true
 
+  mongodb:
+    uri: ${MONGO_URI:mongodb://localhost:27017/orderflow}
+
   data:
     redis:
       host: ${SPRING_DATA_REDIS_HOST:localhost}
       port: ${SPRING_DATA_REDIS_PORT:6379}
-    mongodb:
-      uri: ${MONGO_URI:mongodb://localhost:27017/orderflow}
     web:
       pageable:
         max-page-size: 100
@@ -46,12 +47,18 @@ management:
 
 orderflow:
   security:
+    public-paths:
+      - /auth/**
+      - /.well-known/jwks.json
+    public-get-paths:
+      - /products
+      - /products/*
     admin:
       name: ${ADMIN_NAME:Administrator}
       email: ${ADMIN_EMAIL:admin@orderflow.local}
       password: ${ADMIN_PASSWORD:change-me-in-production}
     jwt:
-      secret: ${JWT_SECRET:local-development-secret-change-in-production}
+      private-key: ${JWT_PRIVATE_KEY:}
       expiration: ${JWT_EXPIRATION:15m}
       refresh-expiration: ${JWT_REFRESH_EXPIRATION:7d}
   outbox:
@@ -83,3 +90,8 @@ resilience4j:
         wait-duration-in-open-state: 30s
         permitted-number-of-calls-in-half-open-state: 2
         automatic-transition-from-open-to-half-open-enabled: true
+
+springdoc:
+  paths-to-exclude:
+    - /internal/**
+    - /.well-known/**

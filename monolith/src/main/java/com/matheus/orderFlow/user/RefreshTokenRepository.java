@@ -1,4 +1,4 @@
-package com.matheus.orderFlow.shared.security;
+package com.matheus.orderFlow.user;
 
 import org.springframework.data.repository.CrudRepository;
 

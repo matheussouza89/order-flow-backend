@@ -22,6 +22,7 @@
 		<module>contracts</module>
 		<module>gateway</module>
 		<module>monolith</module>
+		<module>load</module>
 	</modules>
 
 	<properties>

@@ -11,7 +11,7 @@ import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.redis.connection.DataType;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
-import com.matheus.orderFlow.shared.security.TokenService;
+import com.matheus.orderFlow.user.TokenService;
 
 import java.util.Map;
 import java.util.UUID;

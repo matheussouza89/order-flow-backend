@@ -11,6 +11,9 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
 
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
+
 import static org.junit.jupiter.api.Assertions.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -89,6 +92,24 @@ class RefreshTokenIT extends AbstractIntegrationTest {
 
         mockMvc.perform(get("/orders").header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken))
                 .andExpect(status().isOk());
+    }
+
+    @Test
+    void shouldIssueAnRs256AccessTokenFromTheRefreshTokenAloneWithoutThePassword() throws Exception {
+        String refreshToken = JsonPath.read(login(), "$.refreshToken");
+
+        String refreshed = mockMvc.perform(post("/auth/refresh")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(refreshRequest(refreshToken)))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        String accessToken = JsonPath.read(refreshed, "$.token");
+        String header = new String(
+                Base64.getUrlDecoder().decode(accessToken.split("\\.")[0]), StandardCharsets.UTF_8);
+
+        assertEquals("RS256", JsonPath.read(header, "$.alg"));
+        assertNotNull(JsonPath.read(refreshed, "$.refreshToken"));
     }
 
     @Test

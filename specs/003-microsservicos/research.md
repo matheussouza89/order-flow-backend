@@ -77,8 +77,15 @@ Resilience4j 2.3.0, Testcontainers 2.0.5. Em 2026-10-24: Gatling 3.16.0 e
 
 - **Decisão**: Spring Cloud Gateway Server WebMVC
   (`spring-cloud-starter-gateway-server-webmvc` 5.0.3, BOM do Spring Cloud
-  2025.1.3), roteando por prefixo. Durante a migração, a rota padrão vai para o
-  monólito, e cada etapa move um prefixo para o serviço novo.
+  2025.1.3), roteando só os prefixos da API, sem rota padrão. Durante a migração,
+  os prefixos vão para o monólito, e cada etapa move um prefixo para o serviço
+  novo. Um caminho fora da tabela recebe 404 em `ErrorResponse`, o que bloqueia as
+  rotas internas sem regra própria; uma rota `/**` tomaria também a documentação
+  do próprio gateway. O gateway preserva o `Host`, para que o serviço monte o
+  `Location` e o endereço da documentação como antes, e usa o Apache HttpClient 5,
+  porque o cliente do JDK proíbe definir o `Host` e tenta h2c, que cancela chamadas
+  com corpo. Confiar em `X-Forwarded-*` exigiria aceitar esses cabeçalhos de
+  qualquer cliente, que poderia forjar o host.
 - **Motivo**: mesmo modelo servlet do resto do projeto, configuração por
   propriedades, e testável com as mesmas ferramentas. Os nomes das propriedades de
   rota devem ser conferidos no classpath na implementação, porque mudaram entre
