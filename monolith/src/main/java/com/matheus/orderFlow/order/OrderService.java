@@ -1,5 +1,9 @@
 package com.matheus.orderFlow.order;
 
+import com.matheus.orderFlow.contracts.order.OrderCancelledEvent;
+import com.matheus.orderFlow.contracts.order.OrderConfirmedEvent;
+import com.matheus.orderFlow.contracts.order.OrderDeliveredEvent;
+import com.matheus.orderFlow.contracts.order.OrderShippedEvent;
 import com.matheus.orderFlow.product.ProductService;
 import com.matheus.orderFlow.shared.exception.NotFoundException;
 import com.matheus.orderFlow.shared.security.AuthenticatedUser;

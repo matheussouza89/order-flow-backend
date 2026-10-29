@@ -1,6 +1,6 @@
 package com.matheus.orderFlow.payment;
 
-import com.matheus.orderFlow.order.OrderConfirmedEvent;
+import com.matheus.orderFlow.contracts.order.OrderConfirmedEvent;
 import lombok.RequiredArgsConstructor;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.stereotype.Component;

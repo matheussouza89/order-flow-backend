@@ -1,6 +1,6 @@
 package com.matheus.orderFlow.sales;
 
-import com.matheus.orderFlow.order.OrderConfirmedEvent;
+import com.matheus.orderFlow.contracts.order.OrderConfirmedEvent;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Builder;

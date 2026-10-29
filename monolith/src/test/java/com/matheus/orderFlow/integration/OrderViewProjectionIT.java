@@ -1,9 +1,10 @@
 package com.matheus.orderFlow.integration;
 
+import com.matheus.orderFlow.contracts.order.OrderFacts;
 import com.jayway.jsonpath.JsonPath;
-import com.matheus.orderFlow.order.OrderConfirmedEvent;
-import com.matheus.orderFlow.order.OrderDeliveredEvent;
-import com.matheus.orderFlow.order.OrderShippedEvent;
+import com.matheus.orderFlow.contracts.order.OrderConfirmedEvent;
+import com.matheus.orderFlow.contracts.order.OrderDeliveredEvent;
+import com.matheus.orderFlow.contracts.order.OrderShippedEvent;
 import com.matheus.orderFlow.shared.messaging.RabbitMqConfig;
 import org.awaitility.Awaitility;
 import org.bson.Document;
@@ -52,8 +53,8 @@ class OrderViewProjectionIT extends AbstractIntegrationTest {
         UUID orderId = UUID.randomUUID();
         OrderConfirmedEvent confirmed = confirmed(orderId, 1L);
 
-        publish(RabbitMqConfig.ORDER_CONFIRMED_KEY, confirmed);
-        publish(RabbitMqConfig.ORDER_CONFIRMED_KEY, confirmed);
+        publish(OrderFacts.CONFIRMED_KEY, confirmed);
+        publish(OrderFacts.CONFIRMED_KEY, confirmed);
         awaitSentinel();
 
         Document view = viewOf(orderId);
@@ -65,9 +66,9 @@ class OrderViewProjectionIT extends AbstractIntegrationTest {
     @Test
     void shouldIgnoreAStatusOlderThanTheStoredOne() {
         UUID orderId = UUID.randomUUID();
-        publish(RabbitMqConfig.ORDER_CONFIRMED_KEY, confirmed(orderId, 1L));
-        publish(RabbitMqConfig.ORDER_DELIVERED_KEY, new OrderDeliveredEvent(orderId, 3L, Instant.now()));
-        publish(RabbitMqConfig.ORDER_SHIPPED_KEY, new OrderShippedEvent(orderId, 2L, Instant.now()));
+        publish(OrderFacts.CONFIRMED_KEY, confirmed(orderId, 1L));
+        publish(OrderFacts.DELIVERED_KEY, new OrderDeliveredEvent(orderId, 3L, Instant.now()));
+        publish(OrderFacts.SHIPPED_KEY, new OrderShippedEvent(orderId, 2L, Instant.now()));
         awaitSentinel();
 
         Document view = viewOf(orderId);
@@ -79,8 +80,8 @@ class OrderViewProjectionIT extends AbstractIntegrationTest {
     @Test
     void shouldApplyAStatusThatArrivesBeforeItsConfirmation() {
         UUID orderId = UUID.randomUUID();
-        publish(RabbitMqConfig.ORDER_SHIPPED_KEY, new OrderShippedEvent(orderId, 2L, Instant.now()));
-        publish(RabbitMqConfig.ORDER_CONFIRMED_KEY, confirmed(orderId, 1L));
+        publish(OrderFacts.SHIPPED_KEY, new OrderShippedEvent(orderId, 2L, Instant.now()));
+        publish(OrderFacts.CONFIRMED_KEY, confirmed(orderId, 1L));
 
         Awaitility.await().atMost(Duration.ofSeconds(60)).until(() -> {
             Document view = viewOf(orderId);
@@ -140,7 +141,7 @@ class OrderViewProjectionIT extends AbstractIntegrationTest {
     @Test
     void shouldStoreNoPersonalDataBeyondTheOwnerId() {
         UUID orderId = UUID.randomUUID();
-        publish(RabbitMqConfig.ORDER_CONFIRMED_KEY, confirmed(orderId, 1L));
+        publish(OrderFacts.CONFIRMED_KEY, confirmed(orderId, 1L));
         awaitView(orderId);
 
         assertTrue(ALLOWED_FIELDS.containsAll(viewOf(orderId).keySet()));
@@ -149,7 +150,7 @@ class OrderViewProjectionIT extends AbstractIntegrationTest {
     @Test
     void shouldDiscardConfirmationWithoutSnapshotAndKeepTheQueueMoving() {
         UUID legacyOrderId = UUID.randomUUID();
-        publish(RabbitMqConfig.ORDER_CONFIRMED_KEY, new OrderConfirmedEvent(
+        publish(OrderFacts.CONFIRMED_KEY, new OrderConfirmedEvent(
                 legacyOrderId, UUID.randomUUID(), new BigDecimal("100.00"), null, null, Instant.now()));
 
         awaitSentinel();
@@ -174,7 +175,7 @@ class OrderViewProjectionIT extends AbstractIntegrationTest {
 
     private void awaitSentinel() {
         UUID sentinel = UUID.randomUUID();
-        publish(RabbitMqConfig.ORDER_CONFIRMED_KEY, confirmed(sentinel, 1L));
+        publish(OrderFacts.CONFIRMED_KEY, confirmed(sentinel, 1L));
         awaitView(sentinel);
     }
 

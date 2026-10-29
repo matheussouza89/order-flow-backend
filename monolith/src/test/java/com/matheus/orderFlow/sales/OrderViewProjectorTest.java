@@ -1,7 +1,8 @@
 package com.matheus.orderFlow.sales;
 
-import com.matheus.orderFlow.order.OrderConfirmedEvent;
-import com.matheus.orderFlow.order.OrderShippedEvent;
+import com.matheus.orderFlow.contracts.order.OrderFacts;
+import com.matheus.orderFlow.contracts.order.OrderConfirmedEvent;
+import com.matheus.orderFlow.contracts.order.OrderShippedEvent;
 import com.matheus.orderFlow.shared.messaging.RabbitMqConfig;
 import com.mongodb.client.result.UpdateResult;
 import org.junit.jupiter.api.Test;
@@ -82,7 +83,7 @@ class OrderViewProjectorTest {
 
         ArgumentCaptor<MessagePostProcessor> deferral = ArgumentCaptor.forClass(MessagePostProcessor.class);
         verify(rabbitTemplate).convertAndSend(
-                eq(SalesMessagingConfig.WAIT_EXCHANGE), eq(RabbitMqConfig.ORDER_SHIPPED_KEY), eq(shipped), deferral.capture());
+                eq(SalesMessagingConfig.WAIT_EXCHANGE), eq(OrderFacts.SHIPPED_KEY), eq(shipped), deferral.capture());
         Message sent = deferral.getValue().postProcessMessage(new Message(new byte[0], new MessageProperties()));
         Object deferrals = sent.getMessageProperties().getHeader(SalesMessagingConfig.DEFERRALS_HEADER);
         assertEquals(1, deferrals);

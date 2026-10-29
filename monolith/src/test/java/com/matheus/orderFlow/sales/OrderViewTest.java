@@ -1,6 +1,6 @@
 package com.matheus.orderFlow.sales;
 
-import com.matheus.orderFlow.order.OrderConfirmedEvent;
+import com.matheus.orderFlow.contracts.order.OrderConfirmedEvent;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;

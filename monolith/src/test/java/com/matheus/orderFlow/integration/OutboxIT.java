@@ -72,7 +72,7 @@ class OutboxIT extends AbstractIntegrationTest {
         Map<String, Object> row = onlyOutboxRow();
 
         assertEquals("order.confirmed", row.get("routing_key"));
-        assertEquals("com.matheus.orderFlow.order.OrderConfirmedEvent", row.get("payload_type"));
+        assertEquals("order.confirmed.v1", row.get("payload_type"));
         assertTrue(row.get("payload").toString().contains(orderId));
         assertEquals(0, ((Number) row.get("attempts")).intValue());
     }

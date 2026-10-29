@@ -1,5 +1,6 @@
 package com.matheus.orderFlow.sales;
 
+import com.matheus.orderFlow.contracts.order.OrderFacts;
 import com.matheus.orderFlow.shared.messaging.RabbitMqConfig;
 import org.springframework.amqp.core.Binding;
 import org.springframework.amqp.core.BindingBuilder;
@@ -31,10 +32,10 @@ class SalesMessagingConfig {
     @Bean
     Declarables orderViewsProjectionBindings(Queue orderViewsProjectionQueue, TopicExchange orderEventsExchange) {
         return new Declarables(
-                bind(orderViewsProjectionQueue, orderEventsExchange, RabbitMqConfig.ORDER_CONFIRMED_KEY),
-                bind(orderViewsProjectionQueue, orderEventsExchange, RabbitMqConfig.ORDER_SHIPPED_KEY),
-                bind(orderViewsProjectionQueue, orderEventsExchange, RabbitMqConfig.ORDER_DELIVERED_KEY),
-                bind(orderViewsProjectionQueue, orderEventsExchange, RabbitMqConfig.ORDER_CANCELLED_KEY)
+                bind(orderViewsProjectionQueue, orderEventsExchange, OrderFacts.CONFIRMED_KEY),
+                bind(orderViewsProjectionQueue, orderEventsExchange, OrderFacts.SHIPPED_KEY),
+                bind(orderViewsProjectionQueue, orderEventsExchange, OrderFacts.DELIVERED_KEY),
+                bind(orderViewsProjectionQueue, orderEventsExchange, OrderFacts.CANCELLED_KEY)
         );
     }
 

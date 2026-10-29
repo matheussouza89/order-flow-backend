@@ -11,6 +11,22 @@
 
 	<dependencies>
 		<dependency>
+			<groupId>com.matheus</groupId>
+			<artifactId>contracts</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>com.matheus</groupId>
+			<artifactId>platform-web</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>com.matheus</groupId>
+			<artifactId>platform-messaging</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>com.matheus</groupId>
+			<artifactId>platform-outbox</artifactId>
+		</dependency>
+		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-actuator</artifactId>
 		</dependency>
@@ -61,6 +77,10 @@
 		<dependency>
 			<groupId>org.springdoc</groupId>
 			<artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-zipkin</artifactId>
 		</dependency>
 
 		<dependency>
@@ -118,6 +138,11 @@
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-webmvc-test</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-micrometer-tracing-test</artifactId>
 			<scope>test</scope>
 		</dependency>
 		<dependency>

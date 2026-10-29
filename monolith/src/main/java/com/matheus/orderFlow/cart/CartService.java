@@ -9,7 +9,6 @@ import com.matheus.orderFlow.product.ProductService;
 import com.matheus.orderFlow.shared.exception.DomainValidationException;
 import com.matheus.orderFlow.shared.exception.NotFoundException;
 import com.matheus.orderFlow.shared.security.AuthenticatedUser;
-import com.matheus.orderFlow.shared.exception.UnavailableProductException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;

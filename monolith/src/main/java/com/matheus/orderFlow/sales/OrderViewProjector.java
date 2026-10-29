@@ -1,9 +1,10 @@
 package com.matheus.orderFlow.sales;
 
-import com.matheus.orderFlow.order.OrderCancelledEvent;
-import com.matheus.orderFlow.order.OrderConfirmedEvent;
-import com.matheus.orderFlow.order.OrderDeliveredEvent;
-import com.matheus.orderFlow.order.OrderShippedEvent;
+import com.matheus.orderFlow.contracts.order.OrderFacts;
+import com.matheus.orderFlow.contracts.order.OrderCancelledEvent;
+import com.matheus.orderFlow.contracts.order.OrderConfirmedEvent;
+import com.matheus.orderFlow.contracts.order.OrderDeliveredEvent;
+import com.matheus.orderFlow.contracts.order.OrderShippedEvent;
 import com.matheus.orderFlow.shared.messaging.RabbitMqConfig;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -52,21 +53,21 @@ class OrderViewProjector {
     @RabbitHandler
     void on(OrderShippedEvent event, @Header(name = SalesMessagingConfig.DEFERRALS_HEADER, required = false) Integer deferrals) {
         if (!applyStatus(event.orderId(), "SHIPPED", event.version(), event.occurredAt())) {
-            defer(RabbitMqConfig.ORDER_SHIPPED_KEY, event, deferrals);
+            defer(OrderFacts.SHIPPED_KEY, event, deferrals);
         }
     }
 
     @RabbitHandler
     void on(OrderDeliveredEvent event, @Header(name = SalesMessagingConfig.DEFERRALS_HEADER, required = false) Integer deferrals) {
         if (!applyStatus(event.orderId(), "DELIVERED", event.version(), event.occurredAt())) {
-            defer(RabbitMqConfig.ORDER_DELIVERED_KEY, event, deferrals);
+            defer(OrderFacts.DELIVERED_KEY, event, deferrals);
         }
     }
 
     @RabbitHandler
     void on(OrderCancelledEvent event, @Header(name = SalesMessagingConfig.DEFERRALS_HEADER, required = false) Integer deferrals) {
         if (!applyStatus(event.orderId(), "CANCELLED", event.version(), event.occurredAt())) {
-            defer(RabbitMqConfig.ORDER_CANCELLED_KEY, event, deferrals);
+            defer(OrderFacts.CANCELLED_KEY, event, deferrals);
         }
     }
 

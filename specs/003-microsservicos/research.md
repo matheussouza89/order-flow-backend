@@ -195,10 +195,13 @@ Resilience4j 2.3.0, Testcontainers 2.0.5. Em 2026-10-24: Gatling 3.16.0 e
 - **Decisão**: mantém a exchange `orderflow.events`, e cada consumidor declara a
   própria fila, como hoje. A DLX e a DLQ compartilhadas são declaradas pelo
   `platform`. O tipo da mensagem passa a ser um id lógico com versão
-  (`order.confirmed.v1`), mapeado pelo `DefaultJacksonJavaTypeMapper`, que aceita
-  também os nomes de classe antigos durante a transição. O mapa vem de um bean
-  `FactTypes` que cada serviço declara a partir de `contracts`, para que o
-  `platform-messaging` não conheça os fatos. Uma versão nova de
+  (`order.confirmed.v1`). O mapa vem de um bean `FactTypes` que cada serviço
+  declara a partir de `contracts`, para que o `platform-messaging` não conheça os
+  fatos. O `FactTypes` é o `ClassMapper` do conversor: publica sempre o id lógico,
+  aceita o lógico ou o nome de classe antigo no consumo e recusa qualquer id que
+  não conheça. O `DefaultJacksonJavaTypeMapper`, previsto de início, inverte o mapa
+  de ids num `HashMap`; com o id lógico e o legado apontando para a mesma classe,
+  qual dos dois sairia na publicação dependeria do hash. Uma versão nova de
   formato ganha id e chave de roteamento próprios, publicada junto com a antiga
   até os consumidores migrarem (FR-018).
 - **Motivo**: com o nome da classe Java no cabeçalho, mover um evento de pacote
@@ -226,7 +229,10 @@ Resilience4j 2.3.0, Testcontainers 2.0.5. Em 2026-10-24: Gatling 3.16.0 e
   no gateway e em todos os serviços, com um container do Zipkin no Compose.
   Amostragem total em desenvolvimento e no CI. Observação ligada no `RabbitTemplate`
   e nos listeners, para o rastro atravessar os fatos. O id do rastro entra no
-  padrão de log.
+  padrão de log. No Boot 4.1, a propagação do Brave depende do envio estar ligado
+  (`@ConditionalOnEnabledTracingExport`). Os testes desligam o envio por padrão, e
+  com ele some a propagação; o teste que prova o rastro liga o envio com
+  `@AutoConfigureTracing` e desliga só o exportador do Zipkin.
 - **Motivo**: é o caminho mais curto no Boot 4.1 para o FR-016 e o FR-017: a
   instrumentação de controllers, clientes HTTP e RabbitMQ vem por configuração.
 - **Alternativas consideradas**: `spring-boot-starter-opentelemetry` com coletor

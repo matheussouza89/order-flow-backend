@@ -6,6 +6,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.amqp.core.Binding;
 import org.springframework.amqp.core.BindingBuilder;
 import org.springframework.amqp.core.Message;
+import org.springframework.amqp.core.MessageBuilder;
+import org.springframework.amqp.core.MessageProperties;
 import org.springframework.amqp.core.Queue;
 import org.springframework.amqp.core.QueueBuilder;
 import org.springframework.amqp.core.TopicExchange;
@@ -15,6 +17,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -34,7 +37,10 @@ class DeadLetterIT extends AbstractIntegrationTest {
 
     @Test
     void shouldMoveAMessageToTheDeadLetterQueueAfterFiveFailedAttempts() {
-        rabbitTemplate.convertAndSend(RabbitMqConfig.EXCHANGE, FAILING_QUEUE, "boom");
+        rabbitTemplate.send(RabbitMqConfig.EXCHANGE, FAILING_QUEUE,
+                MessageBuilder.withBody("boom".getBytes(StandardCharsets.UTF_8))
+                        .setContentType(MessageProperties.CONTENT_TYPE_TEXT_PLAIN)
+                        .build());
 
         Message dead = Awaitility.await()
                 .atMost(Duration.ofSeconds(30))
@@ -79,7 +85,7 @@ class DeadLetterIT extends AbstractIntegrationTest {
         }
 
         @RabbitListener(queues = FAILING_QUEUE, containerFactory = RabbitMqConfig.RESILIENT_LISTENER_FACTORY)
-        void onMessage(String body) {
+        void onMessage(Message message) {
             failedAttempts.incrementAndGet();
             throw new IllegalStateException("always fails");
         }

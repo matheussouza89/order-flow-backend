@@ -1,6 +1,6 @@
 package com.matheus.orderFlow.payment;
 
-import com.matheus.orderFlow.shared.messaging.RabbitMqConfig;
+import com.matheus.orderFlow.contracts.order.OrderFacts;
 import org.springframework.amqp.core.Binding;
 import org.springframework.amqp.core.BindingBuilder;
 import org.springframework.amqp.core.Queue;
@@ -25,6 +25,6 @@ class PaymentMessagingConfig {
         return BindingBuilder
                 .bind(orderConfirmedPaymentQueue)
                 .to(orderEventsExchange)
-                .with(RabbitMqConfig.ORDER_CONFIRMED_KEY);
+                .with(OrderFacts.CONFIRMED_KEY);
     }
 }

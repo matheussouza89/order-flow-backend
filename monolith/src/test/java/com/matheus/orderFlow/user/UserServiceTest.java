@@ -1,12 +1,10 @@
 package com.matheus.orderFlow.user;
 
 import com.matheus.orderFlow.shared.exception.DomainValidationException;
-import com.matheus.orderFlow.shared.exception.InvalidLoginException;
 import com.matheus.orderFlow.shared.security.RefreshTokenService;
 import com.matheus.orderFlow.shared.security.RotatedToken;
 import com.matheus.orderFlow.shared.security.TokenService;
 import com.matheus.orderFlow.shared.exception.NotFoundException;
-import com.matheus.orderFlow.shared.exception.UserAlreadyExistsException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;

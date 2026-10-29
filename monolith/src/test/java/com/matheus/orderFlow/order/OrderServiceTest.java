@@ -1,5 +1,9 @@
 package com.matheus.orderFlow.order;
 
+import com.matheus.orderFlow.contracts.order.OrderCancelledEvent;
+import com.matheus.orderFlow.contracts.order.OrderConfirmedEvent;
+import com.matheus.orderFlow.contracts.order.OrderDeliveredEvent;
+import com.matheus.orderFlow.contracts.order.OrderShippedEvent;
 import com.matheus.orderFlow.product.ProductResponse;
 import com.matheus.orderFlow.shared.exception.DomainValidationException;
 import com.matheus.orderFlow.shared.exception.InvalidStatusTransitionException;
