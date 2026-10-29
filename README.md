@@ -11,6 +11,13 @@ incluindo o ciclo de vida do pedido e a cobrança assíncrona com política de
 resiliência, com autenticação por JWT, rotas protegidas por papel e recursos
 vinculados ao usuário do token (ver [Roadmap](#roadmap)).
 
+Está em andamento a separação em microsserviços, especificada em
+[specs/003-microsservicos](specs/003-microsservicos/spec.md). A primeira etapa
+está pronta: o cliente entra por um gateway, a credencial é verificável por
+qualquer serviço sem que ele consiga emiti-la, e o rastro de uma requisição
+atravessa serviços e mensagens. O sistema ainda roda num monólito atrás do
+gateway, que perde uma capacidade por etapa.
+
 ---
 
 ## Stack
@@ -23,11 +30,13 @@ vinculados ao usuário do token (ver [Roadmap](#roadmap)).
 | Mensageria | RabbitMQ |
 | Dado efêmero | Redis (carrinho e refresh tokens, com TTL) |
 | Leitura de vendas | MongoDB (projeção de pedidos, com Spring Data MongoDB) |
+| Entrada única | Spring Cloud Gateway Server WebMVC |
 | Documentação | springdoc-openapi (Swagger UI) |
 | Resiliência | Resilience4j |
-| Segurança | Spring Security + JWT (oauth2-resource-server) |
-| Testes | JUnit 5, Mockito, Testcontainers, WireMock, Awaitility |
-| Build | Maven |
+| Segurança | Spring Security + JWT RS256 com JWKS (oauth2-resource-server) |
+| Rastreamento | Micrometer Tracing (Brave) + Zipkin |
+| Testes | JUnit 5, Mockito, Testcontainers, WireMock, Awaitility, Gatling |
+| Build | Maven multi-módulo |
 
 ---
 
@@ -35,37 +44,50 @@ vinculados ao usuário do token (ver [Roadmap](#roadmap)).
 
 **Pré-requisito:** Docker.
 
-Suba o projeto inteiro — API, MySQL, MongoDB, Redis e RabbitMQ:
+Suba o projeto inteiro — gateway, monólito, MySQL, MongoDB, Redis, RabbitMQ,
+WireMock e Zipkin:
 
 ```bash
 docker compose up --build
 ```
 
-A imagem da aplicação é construída pelo Dockerfile em dois estágios: o
-primeiro compila com Maven, o segundo leva apenas o jar para uma imagem com
-JRE. As conexões vêm de variáveis de ambiente, com o ambiente local como
-padrão — por isso a mesma imagem serve para qualquer ambiente.
+Só o gateway publica a porta 8080. O monólito fica na rede interna, e uma
+chamada direta a ele sem credencial é recusada como qualquer outra.
+
+Um único Dockerfile constrói qualquer módulo, escolhido pelo argumento `MODULE`.
+O primeiro estágio compila com Maven só o módulo e as bibliotecas de que ele
+depende; o segundo leva apenas o jar para uma imagem com JRE. As conexões vêm de
+variáveis de ambiente, com o ambiente local como padrão, então a mesma imagem
+serve para qualquer ambiente.
 
 ⚠️ Três variáveis não devem usar o padrão fora da máquina local:
 
 | Variável | Por quê |
 |---|---|
-| `JWT_SECRET` | assina os tokens; quem a conhece forja um token de qualquer usuário, inclusive administrador. Mínimo de 32 caracteres, senão a aplicação não sobe |
+| `JWT_PRIVATE_KEY` | chave privada RSA, em PEM PKCS#8, que assina os tokens. Sem ela, uma chave é gerada na subida: serve para desenvolvimento, mas cada reinício invalida os tokens de acesso já emitidos (o refresh continua valendo) |
 | `ADMIN_EMAIL` | identifica o administrador criado na primeira subida |
 | `ADMIN_PASSWORD` | a senha dele; com o padrão, o log avisa na subida |
 
 O administrador é criado automaticamente quando não existe nenhum, então subir
 o projeto já dá acesso às rotas de `ADMIN`.
 
-Para desenvolver com a aplicação fora do container (Java 21 necessário), suba
-só a infraestrutura e rode pelo Maven:
+Cada serviço terá schema e usuário próprios no MySQL, criados por
+`docker/mysql/init/01-schemas.sql` na primeira subida do volume. Um volume que
+já existia antes da separação não roda esse script de novo; aplique uma vez:
 
 ```bash
-docker compose up -d mysql mongo redis rabbitmq
+docker compose exec -T mysql mysql -uroot -proot < docker/mysql/init/01-schemas.sql
+```
+
+Para desenvolver com o monólito fora do container (Java 21 necessário), suba
+só a infraestrutura e rode o módulo pelo Maven. Ele atende direto na porta 8080:
+
+```bash
+docker compose up -d mysql mongo redis rabbitmq zipkin
 ```
 
 ```bash
-./mvnw spring-boot:run
+./mvnw -pl monolith spring-boot:run
 ```
 
 | Recurso | URL |
@@ -73,6 +95,7 @@ docker compose up -d mysql mongo redis rabbitmq
 | API | http://localhost:8080/products |
 | Swagger UI | http://localhost:8080/swagger-ui.html |
 | Health check | http://localhost:8080/actuator/health |
+| Rastros (Zipkin) | http://localhost:9411 |
 
 ---
 
@@ -85,18 +108,88 @@ alteração:
 ./mvnw test
 ```
 
-Roda os **231 testes unitários** em poucos segundos, sem Docker.
+Roda os **250 testes unitários** em poucos segundos, sem Docker.
 
 ```bash
 ./mvnw verify
 ```
 
-Roda os unitários **mais os 134 de integração**, que sobem MySQL, MongoDB, Redis e
+Roda os unitários **mais os 162 de integração**, que sobem MySQL, MongoDB, Redis e
 RabbitMQ reais via Testcontainers, e um WireMock fazendo as vezes do gateway de
-pagamento.
+pagamento ou do serviço atrás da entrada única.
 
-A separação é feita por convenção de nome: o Surefire pega `*Test.java`, o
-Failsafe pega `*IT.java`.
+```bash
+./mvnw verify -Pe2e -pl e2e -am
+```
+
+Roda os **10 testes ponta a ponta**, que constroem as imagens, sobem o Compose
+inteiro pelo Testcontainers e falam com o sistema pela porta 8080, como um
+cliente. São eles que provam o que só aparece com os serviços juntos: todas as
+rotas respondendo pela entrada única, a chamada direta sem credencial recusada e
+a documentação única cobrindo todas as rotas. Usam as mesmas portas do Compose,
+então a pilha de desenvolvimento precisa estar parada.
+
+| Módulo | Unitários | Integração | Ponta a ponta |
+|---|---|---|---|
+| `monolith` | 219 | 142 | — |
+| `gateway` | — | 20 | — |
+| `platform-outbox` | 16 | — | — |
+| `contracts` | 7 | — | — |
+| `platform-messaging` | 5 | — | — |
+| `platform-test` | 2 | — | — |
+| `platform-web` | 1 | — | — |
+| `e2e` | — | — | 10 |
+
+A separação é feita por convenção de nome: o Surefire pega só `*Test.java`, o
+Failsafe pega `*IT.java`. O teste que sobe o contexto inteiro se chama
+`OrderFlowApplicationIT` porque precisa dos containers. Com o nome antigo,
+`OrderFlowApplicationTests`, ele rodava no Surefire, que por padrão aceita
+`*Tests`, e o `./mvnw test` deixava de rodar sem Docker.
+
+---
+
+## Teste de carga
+
+A separação em serviços acrescenta saltos de rede a cada requisição. Para saber
+quanto isso custa, o mesmo teste de carga roda depois da primeira etapa, como
+linha de base, e no fim da migração, na mesma máquina. Os números servem para
+comparar as duas medições, não como capacidade de produção.
+
+Com o Compose de pé:
+
+```bash
+./mvnw -pl load gatling:test
+```
+
+A simulação, em Gatling, cria 20 produtos e um usuário por cliente simulado.
+Depois, 50 clientes entram ao longo de 30 segundos e, por 5 minutos, repetem o
+mesmo ciclo: vitrine (lista e detalhe), item no carrinho, finalização da compra,
+lista e detalhe dos pedidos, com 0,5 a 1,5 segundo de pausa entre os passos. O
+login acontece uma vez por cliente, fora do ciclo: o BCrypt custa cerca de 250 ms
+de CPU por login e dominaria a medição sem dizer nada sobre a separação. Número de
+clientes e duração mudam com `-Dusers` e `-Dduration` (em segundos).
+
+O build falha se uma meta não for atingida: p95 da finalização até 1 s, p95 da
+vitrine até 300 ms e menos de 1% de falhas. O relatório HTML fica em
+`load/target/gatling/`.
+
+**Linha de base**, em 2026-10-29, com o monólito atrás do gateway:
+
+| Requisição | Total | p50 (ms) | p75 (ms) | p95 (ms) | p99 (ms) | Máx. (ms) |
+|---|---|---|---|---|---|---|
+| vitrine: lista de produtos | 3.718 | 7 | 8 | 11 | 17 | 52 |
+| vitrine: detalhe do produto | 3.718 | 5 | 5 | 8 | 12 | 23 |
+| item no carrinho | 3.708 | 9 | 10 | 13 | 20 | 65 |
+| finalização da compra | 3.692 | 13 | 15 | 22 | 40 | 85 |
+| lista de pedidos | 3.686 | 7 | 8 | 10 | 14 | 34 |
+| detalhe do pedido | 3.686 | 5 | 6 | 9 | 13 | 24 |
+| login | 50 | 247 | 254 | 264 | 285 | 285 |
+| **todas** | **22.258** | **7** | **10** | **15** | **23** | **285** |
+
+Vazão média de 67 requisições por segundo, sem nenhuma falha. Máquina: AMD
+Ryzen 7 5700G (8 núcleos, 16 threads), 31 GB de RAM, Windows 11 com Docker
+Desktop 25.0.3 sobre WSL2 (16 CPUs e 15 GB para os containers). Cada aplicação
+roda com `-Xmx256m`.
 
 ---
 
@@ -460,6 +553,18 @@ qual algoritmo usar, e aceita um token forjado que declara `"alg": "none"`. É
 uma falha que passa em todos os testes de caminho feliz. O algoritmo aqui é
 fixado na configuração e o que o token afirma é ignorado.
 
+A assinatura é RS256, não HS256. Com HS256, o segredo que valida é o mesmo que
+assina: separado em serviços, cada serviço que verifica tokens poderia emitir um
+token de administrador. Com RS256, só o emissor tem a chave privada, e os demais
+validam com a pública, publicada em `GET /.well-known/jwks.json`. Essa rota fica
+na rede interna; a entrada única não a repassa. O cabeçalho leva `kid`, a
+impressão digital da chave, para que uma troca de chave seja reconhecida.
+
+A troca de algoritmo não obrigou ninguém a entrar de novo. O token de acesso
+antigo, HS256, passou a receber 401, e o refresh token, que é opaco e guardado
+no Redis, gera um par novo sem pedir senha. Aceitar os dois algoritmos por quinze
+minutos seria código a mais para uma janela que o refresh já cobre.
+
 ### O primeiro administrador nasce fora do cadastro
 
 Promover alguém a `ADMIN` exige ser `ADMIN` — e no banco vazio não existe
@@ -751,7 +856,7 @@ O preço do desenho é consistência eventual: uma venda confirmada pode levar
 alguns segundos para aparecer no relatório. A alternativa de guardar a projeção
 numa tabela do próprio MySQL foi considerada e fica registrada no
 [ADR 0001](docs/adr/0001-read-model-pedidos-mongodb.md), junto com a
-[especificação](docs/specs/read-model-pedidos.md).
+[especificação](specs/001-read-model-pedidos/spec.md).
 
 A imagem é `mongo:7`, não a 8. O MongoDB 8 embute uma versão do TCMalloc
 incompatível com o kernel Linux de 6.19 a 7.0.13 e, nesse intervalo, se recusa
@@ -768,6 +873,99 @@ que encerrava logo depois de abrir a porta só aparecia mais tarde, como
 `MongoDBContainer should be started first`, sem pista da causa. Com a espera
 pelo log, a falha sai no próprio start do container, com o código de saída do
 `mongod`.
+
+A conexão é configurada por `spring.mongodb.uri`. No Boot 4, a antiga
+`spring.data.mongodb.uri` deixou de ser lida, sem erro na subida. Os testes não
+percebiam, porque o Testcontainers injeta a conexão; no Compose, a aplicação
+tentava o Mongo em `localhost`, e a projeção nunca gravava. O healthcheck do
+container, acrescentado na separação em serviços, foi o que mostrou.
+
+### Separação em microsserviços, uma capacidade por vez
+
+O monólito está sendo separado em serviços, um por capacidade: identidade,
+catálogo, carrinho, pedidos, pagamentos, relatórios de vendas e notificações. A
+motivação é aprender e demonstrar arquitetura distribuída, não escala: as
+fronteiras já existiam no código, e agregados já se referenciavam por `UUID`. A
+alternativa mais forte, um monólito modular, custa muito menos e fica registrada
+como a decisão a revisitar se manter vários serviços travar a evolução. Decisões
+e alternativas estão em [research.md](specs/003-microsservicos/research.md).
+
+A migração é incremental: a cada etapa, um pacote sai do monólito e o sistema
+continua funcionando por inteiro. O cliente não percebe a mudança, porque entra
+sempre pelo mesmo endereço.
+
+### Módulos, e o que pode ser compartilhado
+
+O repositório é Maven multi-módulo. As bibliotecas compartilhadas ficam em
+`platform/`, divididas para que cada serviço carregue só o que usa:
+`platform-web` (formato de erro e paginação), `platform-security` (validação do
+token e regras de acesso), `platform-messaging` (exchange, DLQ e conversor dos
+fatos), `platform-outbox` e `platform-test`. O gateway, por exemplo, não carrega o
+resource server.
+
+O `platform` não conhece domínio. As exceções que ele trata são genéricas por
+status, como `ConflictException` (409) e `UnauthorizedException` (401), e cada
+funcionalidade estende a sua: `UserAlreadyExistsException` mora no pacote de
+usuários, não numa pasta compartilhada. Os fatos ficam no módulo `contracts`, que
+o `platform` também não conhece; cada serviço entrega à mensageria o mapa dos
+fatos que usa.
+
+### Uma entrada para todos os serviços
+
+O cliente usa só a porta 8080, servida por um Spring Cloud Gateway no mesmo
+modelo servlet do resto do projeto. Ele roteia apenas os prefixos da API, sem
+rota padrão: um caminho fora da tabela responde 404 no formato de erro de
+sempre. Assim, as rotas internas (`/internal/**`, `/.well-known/jwks.json` e o
+actuator dos serviços) ficam fora do alcance do cliente sem regra própria.
+
+Quando o serviço de destino não responde, a entrada devolve `ErrorResponse`:
+503 se a conexão falha e 504 se a resposta passa de 4,5 segundos. O valor fica
+abaixo dos 5 segundos que a especificação admite para uma falha no checkout.
+Erros produzidos pelos serviços passam sem alteração.
+
+O gateway preserva o cabeçalho `Host`. O serviço monta o `Location` das respostas
+201 e o endereço do "Try it out" da documentação como montava antes da entrada
+única. A alternativa, confiar em `X-Forwarded-*`, exigiria aceitar esses
+cabeçalhos de qualquer cliente, que poderia forjar o host. Para preservar o
+`Host`, o gateway usa o Apache HttpClient 5: o cliente HTTP do JDK proíbe definir
+esse cabeçalho e ainda tenta subir para HTTP/2, o que cancelava chamadas com
+corpo.
+
+A documentação também tem uma página só, servida pela entrada, com uma entrada
+por serviço. Cada serviço documenta as próprias rotas, e as que a entrada não
+repassa ficam fora do documento.
+
+### Fatos com tipo versionado
+
+Os eventos publicados entre serviços levam no cabeçalho `__TypeId__` um id
+lógico, como `order.confirmed.v1`, e não o nome da classe Java. Com o nome da
+classe, mover o evento de pacote quebraria todos os consumidores. O formato só
+cresce: o consumidor ignora campos que não conhece, e remover ou renomear um
+campo exige uma versão nova do fato. Um teste fixa os campos e os ids de cada
+fato, para que uma quebra de contrato apareça no build.
+
+O mapa entre id e classe é o `ClassMapper` do conversor do Spring AMQP. O
+caminho previsto era o `DefaultJacksonJavaTypeMapper`, mas ele inverte o mapa num
+`HashMap`: com o id lógico e o nome de classe antigo, aceito durante a transição,
+apontando para a mesma classe, qual dos dois sairia na publicação dependeria do
+hash. O `ClassMapper` publica sempre o id lógico e recusa qualquer id que não
+conheça, em vez de instanciar a classe que a mensagem pedir.
+
+### O rastro atravessa o outbox
+
+Cada requisição ganha um identificador de rastro, propagado no cabeçalho
+`traceparent` pelas chamadas HTTP e pelas mensagens, e enviado ao Zipkin com o
+tempo de cada passo. O id também entra em toda linha de log.
+
+O outbox é o ponto em que o rastro se perderia: o evento é gravado na transação
+da requisição e publicado depois, por outra thread. Por isso a tabela guarda o
+`traceparent` de quem gravou, e o relay publica dentro desse rastro. A cobrança
+e a projeção de vendas aparecem no mesmo rastro da confirmação que as causou.
+
+Um detalhe custou tempo e vale registrar: no Boot 4.1, a propagação do Brave só
+existe com o envio dos rastros ligado. Os testes desligam o envio por padrão e,
+com ele, a propagação; o teste que prova o rastro liga o envio com
+`@AutoConfigureTracing` e desliga só o exportador do Zipkin.
 
 ## Endpoints
 
@@ -901,7 +1099,9 @@ alguns segundos de atraso em relação ao pedido.
 - [x] Fila de espera e DLQ para status que chega antes da confirmação
 - [x] Reconstrução da projeção a partir do MySQL
 - [x] Relatórios administrativos de vendas por dia e por produto
-- [x] 365 testes, separados por velocidade (unitários e integração)
+- [x] 422 testes, separados por velocidade (unitários, integração e ponta a ponta)
+- [x] Separação em serviços, etapa 1: entrada única, credencial RS256 com JWKS,
+  fatos com tipo versionado, rastreamento com Zipkin e linha de base de carga
 - [x] Pipeline de CI rodando `mvn verify` a cada push
 - [x] Imagem da aplicação e stack completa em Docker, com conexões por variável de ambiente
 - [x] Documentação OpenAPI

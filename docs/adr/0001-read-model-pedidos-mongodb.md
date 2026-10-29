@@ -2,7 +2,7 @@
 
 - **Status:** Aceito
 - **Data:** 2026-10-13
-- **Spec:** [read-model-pedidos](../specs/read-model-pedidos.md)
+- **Spec:** [read-model-pedidos](../../specs/001-read-model-pedidos/spec.md)
 
 ## Contexto
 

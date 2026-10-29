@@ -1,0 +1,97 @@
+spring:
+  application:
+    name: orderflow
+
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3308/orderflow}
+    username: ${SPRING_DATASOURCE_USERNAME:orderflow}
+    password: ${SPRING_DATASOURCE_PASSWORD:orderflow}
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+
+  flyway:
+    enabled: true
+
+  mongodb:
+    uri: ${MONGO_URI:mongodb://localhost:27017/orderflow}
+
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:localhost}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
+    web:
+      pageable:
+        max-page-size: 100
+
+  rabbitmq:
+    host: ${SPRING_RABBITMQ_HOST:localhost}
+    port: ${SPRING_RABBITMQ_PORT:5672}
+    username: ${SPRING_RABBITMQ_USERNAME:orderflow}
+    password: ${SPRING_RABBITMQ_PASSWORD:orderflow}
+    template:
+      observation-enabled: true
+    listener:
+      simple:
+        observation-enabled: true
+
+management:
+  tracing:
+    sampling:
+      probability: 1.0
+    export:
+      zipkin:
+        endpoint: ${ZIPKIN_ENDPOINT:http://localhost:9411/api/v2/spans}
+
+orderflow:
+  security:
+    public-paths:
+      - /auth/**
+      - /.well-known/jwks.json
+    public-get-paths:
+      - /products
+      - /products/*
+    admin:
+      name: ${ADMIN_NAME:Administrator}
+      email: ${ADMIN_EMAIL:admin@orderflow.local}
+      password: ${ADMIN_PASSWORD:change-me-in-production}
+    jwt:
+      private-key: ${JWT_PRIVATE_KEY:}
+      expiration: ${JWT_EXPIRATION:15m}
+      refresh-expiration: ${JWT_REFRESH_EXPIRATION:7d}
+  outbox:
+    poll-interval: ${OUTBOX_POLL_INTERVAL:1000}
+  payment:
+    gateway:
+      url: ${PAYMENT_GATEWAY_URL:http://localhost:8090}
+      connect-timeout: 2s
+      read-timeout: 3s
+
+resilience4j:
+  retry:
+    instances:
+      paymentGateway:
+        max-attempts: 3
+        wait-duration: 500ms
+        enable-exponential-backoff: true
+        exponential-backoff-multiplier: 2
+        retry-exceptions:
+          - org.springframework.web.client.ResourceAccessException
+          - org.springframework.web.client.HttpServerErrorException
+  circuitbreaker:
+    instances:
+      paymentGateway:
+        sliding-window-type: COUNT_BASED
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 2
+        automatic-transition-from-open-to-half-open-enabled: true
+
+springdoc:
+  paths-to-exclude:
+    - /internal/**
+    - /.well-known/**

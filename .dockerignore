@@ -1,8 +1,12 @@
-target/
+**/target/
 .git/
 .idea/
 .github/
+.claude/
+.specify/
+specs/
+docs/
 *.md
-openapi.yaml
+**/openapi.yaml
 docker-compose.yml
 Dockerfile
