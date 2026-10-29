@@ -85,18 +85,21 @@ alteração:
 ./mvnw test
 ```
 
-Roda os **231 testes unitários** em poucos segundos, sem Docker.
+Roda os **230 testes unitários** em poucos segundos, sem Docker.
 
 ```bash
 ./mvnw verify
 ```
 
-Roda os unitários **mais os 134 de integração**, que sobem MySQL, MongoDB, Redis e
+Roda os unitários **mais os 135 de integração**, que sobem MySQL, MongoDB, Redis e
 RabbitMQ reais via Testcontainers, e um WireMock fazendo as vezes do gateway de
 pagamento.
 
-A separação é feita por convenção de nome: o Surefire pega `*Test.java`, o
-Failsafe pega `*IT.java`.
+A separação é feita por convenção de nome: o Surefire pega só `*Test.java`, o
+Failsafe pega `*IT.java`. O teste que sobe o contexto inteiro se chama
+`OrderFlowApplicationIT` porque precisa dos containers. Com o nome antigo,
+`OrderFlowApplicationTests`, ele rodava no Surefire, que por padrão aceita
+`*Tests`, e o `./mvnw test` deixava de rodar sem Docker.
 
 ---
 

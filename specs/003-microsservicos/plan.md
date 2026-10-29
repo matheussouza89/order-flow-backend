@@ -50,8 +50,8 @@ do checkout em até 5 s (SC-003).
 e a infraestrutura
 
 **Scale/Scope**: 8 aplicações (gateway, `identity`, `catalog`, `cart`, `orders`,
-`payment`, `sales` e `notifications`, esta pela spec 002); 367 testes de hoje
-(232 unitários e 135 de integração, com o teste de contexto contado como
+`payment`, `sales` e `notifications`, esta pela spec 002); 365 testes de hoje
+(230 unitários e 135 de integração, com o teste de contexto contado como
 integração) redistribuídos; 7 etapas
 
 ## Constitution Check

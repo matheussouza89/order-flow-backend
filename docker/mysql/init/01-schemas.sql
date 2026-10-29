@@ -1,0 +1,19 @@
+CREATE DATABASE IF NOT EXISTS orderflow;
+CREATE DATABASE IF NOT EXISTS identity;
+CREATE DATABASE IF NOT EXISTS catalog;
+CREATE DATABASE IF NOT EXISTS orders;
+CREATE DATABASE IF NOT EXISTS payment;
+
+CREATE USER IF NOT EXISTS 'orderflow'@'%' IDENTIFIED BY 'orderflow';
+CREATE USER IF NOT EXISTS 'identity'@'%' IDENTIFIED BY 'identity';
+CREATE USER IF NOT EXISTS 'catalog'@'%' IDENTIFIED BY 'catalog';
+CREATE USER IF NOT EXISTS 'orders'@'%' IDENTIFIED BY 'orders';
+CREATE USER IF NOT EXISTS 'payment'@'%' IDENTIFIED BY 'payment';
+
+GRANT ALL PRIVILEGES ON orderflow.* TO 'orderflow'@'%';
+GRANT ALL PRIVILEGES ON identity.* TO 'identity'@'%';
+GRANT ALL PRIVILEGES ON catalog.* TO 'catalog'@'%';
+GRANT ALL PRIVILEGES ON orders.* TO 'orders'@'%';
+GRANT ALL PRIVILEGES ON payment.* TO 'payment'@'%';
+
+FLUSH PRIVILEGES;
