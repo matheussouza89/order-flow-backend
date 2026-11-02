@@ -948,6 +948,11 @@ a conexão estoura o tempo em vez de ser recusada. No HttpClient 5, o
 `ConnectTimeoutException` estende `SocketTimeoutException`, e a tradução
 respondia 504, como se o serviço estivesse só lento.
 
+O mesmo cache tem um segundo efeito, que só o CI mostrou: quando o serviço volta
+com outro IP, a entrada leva até 30 segundos, o prazo padrão do cache, para
+alcançá-lo. Na máquina local o container voltava com o mesmo IP e o efeito não
+aparecia.
+
 O gateway preserva o cabeçalho `Host`. O serviço monta o `Location` das respostas
 201 e o endereço do "Try it out" da documentação como montava antes da entrada
 única. A alternativa, confiar em `X-Forwarded-*`, exigiria aceitar esses

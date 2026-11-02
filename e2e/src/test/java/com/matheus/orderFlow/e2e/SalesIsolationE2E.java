@@ -36,6 +36,7 @@ class SalesIsolationE2E extends AbstractE2E {
 
         Awaitility.await()
                 .atMost(Duration.ofSeconds(60))
+                .ignoreExceptions()
                 .until(() -> quantitySold(admin, product), quantity -> quantity == 3);
     }
 
@@ -49,6 +50,7 @@ class SalesIsolationE2E extends AbstractE2E {
         post("/orders/" + orderId + "/confirm", customer.bearer(), "");
         Awaitility.await()
                 .atMost(Duration.ofSeconds(60))
+                .ignoreExceptions()
                 .until(() -> quantitySold(admin, product), quantity -> quantity == 2);
         String before = settledReports(admin);
 
@@ -87,6 +89,7 @@ class SalesIsolationE2E extends AbstractE2E {
         Awaitility.await()
                 .atMost(Duration.ofSeconds(60))
                 .pollInterval(Duration.ofSeconds(2))
+                .ignoreExceptions()
                 .until(() -> {
                     String current = reports(admin);
                     boolean unchanged = current.equals(last[0]);
@@ -99,7 +102,11 @@ class SalesIsolationE2E extends AbstractE2E {
 
     private static String reports(String admin) {
         String today = LocalDate.now().toString();
+        HttpResponse<String> ranking = get(TOP_PRODUCTS, admin);
+        HttpResponse<String> daily = get("/admin/sales/daily?from=" + today + "&to=" + today, admin);
+        assertEquals(200, ranking.statusCode(), ranking.body());
+        assertEquals(200, daily.statusCode(), daily.body());
 
-        return get(TOP_PRODUCTS, admin).body() + get("/admin/sales/daily?from=" + today + "&to=" + today, admin).body();
+        return ranking.body() + daily.body();
     }
 }
