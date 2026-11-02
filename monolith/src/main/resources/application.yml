@@ -15,9 +15,6 @@ spring:
   flyway:
     enabled: true
 
-  mongodb:
-    uri: ${MONGO_URI:mongodb://localhost:27017/orderflow}
-
   data:
     redis:
       host: ${SPRING_DATA_REDIS_HOST:localhost}

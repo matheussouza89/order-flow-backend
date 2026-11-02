@@ -5,6 +5,7 @@ import com.matheus.orderFlow.contracts.order.OrderConfirmedEvent;
 import com.matheus.orderFlow.contracts.order.OrderDeliveredEvent;
 import com.matheus.orderFlow.contracts.order.OrderShippedEvent;
 import com.matheus.orderFlow.product.ProductService;
+import com.matheus.orderFlow.shared.exception.DomainValidationException;
 import com.matheus.orderFlow.shared.exception.NotFoundException;
 import com.matheus.orderFlow.shared.security.AuthenticatedUser;
 import com.matheus.orderFlow.shared.web.PageResponse;
@@ -12,17 +13,25 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.function.BinaryOperator;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class OrderService {
+    private static final int MAX_EXPORT_SIZE = 500;
+
     private final OrderRepository orderRepository;
     private final ProductService productService;
     private final ApplicationEventPublisher events;
@@ -40,6 +49,36 @@ public class OrderService {
                 : orderRepository.findByUserId(authenticatedUser.requireId(), pageable);
 
         return PageResponse.of(orders.map(OrderResponse::from));
+    }
+
+    @Transactional(readOnly = true)
+    public PageResponse<OrderExportResponse> exportConfirmed(int page, int size) {
+        if (page < 0) {
+            throw new DomainValidationException("page", "Page must not be negative");
+        }
+        if (size < 1 || size > MAX_EXPORT_SIZE) {
+            throw new DomainValidationException("size", "Size must be between 1 and " + MAX_EXPORT_SIZE);
+        }
+
+        Page<Order> orders = orderRepository.findConfirmed(PageRequest.of(page, size));
+        Map<UUID, Instant> confirmedAt = confirmationTimes(orders.getContent());
+
+        return PageResponse.of(orders.map(order -> OrderExportResponse.from(
+                order, confirmedAt.getOrDefault(order.getId(), order.getCreatedAt()))));
+    }
+
+    private Map<UUID, Instant> confirmationTimes(List<Order> orders) {
+        if (orders.isEmpty()) {
+            return Map.of();
+        }
+
+        List<String> ids = orders.stream().map(order -> order.getId().toString()).toList();
+
+        return orderRepository.findConfirmationTimes(ids).stream()
+                .collect(Collectors.toMap(
+                        row -> UUID.fromString((String) row[0]),
+                        row -> Instant.parse((String) row[1]),
+                        BinaryOperator.minBy(Comparator.<Instant>naturalOrder())));
     }
 
     @Transactional

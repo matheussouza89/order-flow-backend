@@ -27,21 +27,27 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class DocumentationIT {
     private static final WireMockServer MONOLITH = new WireMockServer(options().dynamicPort());
+    private static final WireMockServer SALES = new WireMockServer(options().dynamicPort());
     private static final String MONOLITH_DOCS = """
             {"openapi":"3.1.0","info":{"title":"OrderFlow API"},"paths":{"/orders":{}}}""";
+    private static final String SALES_DOCS = """
+            {"openapi":"3.1.0","info":{"title":"OrderFlow Sales API"},"paths":{"/admin/sales/daily":{}}}""";
 
     static {
         MONOLITH.start();
+        SALES.start();
     }
 
     @DynamicPropertySource
-    static void routeToTheFakeMonolith(DynamicPropertyRegistry registry) {
+    static void routeToTheFakeServices(DynamicPropertyRegistry registry) {
         registry.add("MONOLITH_URL", MONOLITH::baseUrl);
+        registry.add("SALES_URL", SALES::baseUrl);
     }
 
     @AfterAll
-    static void stopTheFakeMonolith() {
+    static void stopTheFakeServices() {
         MONOLITH.stop();
+        SALES.stop();
     }
 
     @LocalServerPort
@@ -70,18 +76,23 @@ class DocumentationIT {
 
         List<Map<String, String>> urls = JsonPath.read(response.body(), "$.urls");
 
-        assertThat(urls).contains(Map.of("name", "monolith", "url", "/v3/api-docs/monolith"));
+        assertThat(urls).containsExactlyInAnyOrder(
+                Map.of("name", "monolith", "url", "/v3/api-docs/monolith"),
+                Map.of("name", "sales", "url", "/v3/api-docs/sales"));
     }
 
     @Test
     void shouldFetchEachServiceDocumentThroughTheSingleEntry() throws Exception {
-        MONOLITH.stubFor(get(urlEqualTo("/v3/api-docs"))
+        serveDocs(MONOLITH, MONOLITH_DOCS);
+        serveDocs(SALES, SALES_DOCS);
+
+        assertEquals(MONOLITH_DOCS, fetch("/v3/api-docs/monolith").body());
+        assertEquals(SALES_DOCS, fetch("/v3/api-docs/sales").body());
+    }
+
+    private static void serveDocs(WireMockServer service, String document) {
+        service.stubFor(get(urlEqualTo("/v3/api-docs"))
                 .willReturn(aResponse().withStatus(200).withHeader("Content-Type", "application/json")
-                        .withBody(MONOLITH_DOCS)));
-
-        HttpResponse<String> response = fetch("/v3/api-docs/monolith");
-
-        assertEquals(200, response.statusCode());
-        assertEquals(MONOLITH_DOCS, response.body());
+                        .withBody(document)));
     }
 }

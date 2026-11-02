@@ -11,9 +11,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.annotation.RabbitHandler;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
-import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.mongodb.core.MongoTemplate;
-import org.springframework.data.mongodb.core.ReplaceOptions;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.mongodb.core.query.Update;
@@ -30,6 +28,7 @@ import java.util.UUID;
 class OrderViewProjector {
 
     private final MongoTemplate mongoTemplate;
+    private final OrderViewStore store;
     private final RabbitTemplate rabbitTemplate;
 
     @RabbitHandler
@@ -39,13 +38,7 @@ class OrderViewProjector {
             return;
         }
 
-        OrderView view = OrderView.confirmed(event);
-        Query storedIsOlder = Query.query(
-                Criteria.where("_id").is(view.getId()).and("version").lt(view.getVersion()));
-
-        try {
-            mongoTemplate.replace(storedIsOlder, view, ReplaceOptions.replaceOptions().upsert(), OrderView.COLLECTION);
-        } catch (DuplicateKeyException alreadyApplied) {
+        if (!store.replaceIfNewer(OrderView.confirmed(event))) {
             log.debug("Confirmation already applied or superseded: orderId={}", event.orderId());
         }
     }

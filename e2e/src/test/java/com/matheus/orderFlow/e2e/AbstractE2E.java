@@ -1,7 +1,10 @@
 package com.matheus.orderFlow.e2e;
 
 import com.jayway.jsonpath.JsonPath;
+import org.awaitility.Awaitility;
+import org.testcontainers.DockerClientFactory;
 import org.testcontainers.containers.ComposeContainer;
+import org.testcontainers.containers.Container;
 import org.testcontainers.containers.wait.strategy.Wait;
 import org.testcontainers.containers.wait.strategy.WaitStrategy;
 
@@ -26,7 +29,8 @@ public abstract class AbstractE2E {
             .withBuild(true)
             .withRemoveVolumes(true)
             .withExposedService("gateway", HTTP_PORT, healthy())
-            .withExposedService("monolith", HTTP_PORT, healthy());
+            .withExposedService("monolith", HTTP_PORT, healthy())
+            .withExposedService("sales", HTTP_PORT, healthy());
 
     private static final HttpClient HTTP = HttpClient.newHttpClient();
 
@@ -48,6 +52,33 @@ public abstract class AbstractE2E {
 
     protected static URI gateway(String path) {
         return service("gateway", path);
+    }
+
+    protected static void stop(String service) {
+        DockerClientFactory.instance().client().stopContainerCmd(containerOf(service)).exec();
+    }
+
+    protected static void start(String service) {
+        DockerClientFactory.instance().client().startContainerCmd(containerOf(service)).exec();
+        Awaitility.await()
+                .atMost(Duration.ofMinutes(2))
+                .ignoreExceptions()
+                .until(() -> send(HttpRequest.newBuilder(service(service, "/actuator/health")).GET()).statusCode() == 200);
+    }
+
+    protected static Container.ExecResult runIn(String service, String... command) {
+        try {
+            return COMPOSE.getContainerByServiceName(service).orElseThrow().execInContainer(command);
+        } catch (IOException exception) {
+            throw new UncheckedIOException(exception);
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException(exception);
+        }
+    }
+
+    private static String containerOf(String service) {
+        return COMPOSE.getContainerByServiceName(service).orElseThrow().getContainerId();
     }
 
     protected static URI service(String name, String path) {

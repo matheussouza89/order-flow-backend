@@ -1,9 +1,6 @@
 package com.matheus.orderFlow.sales;
 
 import com.matheus.orderFlow.contracts.order.OrderConfirmedEvent;
-import lombok.AccessLevel;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
 import lombok.Getter;
 import org.bson.types.Decimal128;
 import org.springframework.data.annotation.Id;
@@ -15,8 +12,6 @@ import java.util.List;
 
 @Document(collection = OrderView.COLLECTION)
 @Getter
-@Builder
-@AllArgsConstructor(access = AccessLevel.PRIVATE)
 class OrderView {
 
     static final String COLLECTION = "order_views";
@@ -49,9 +44,22 @@ class OrderView {
         return view;
     }
 
+    static OrderView exported(ExportedOrder order) {
+        OrderView view = new OrderView();
+        view.id = order.orderId().toString();
+        view.userId = order.userId().toString();
+        view.status = order.status();
+        view.items = order.items().stream().map(Line::from).toList();
+        view.total = new Decimal128(order.items().stream()
+                .map(ExportedOrder.Item::subtotal)
+                .reduce(BigDecimal.ZERO, BigDecimal::add));
+        view.version = order.version();
+        view.confirmedAt = order.confirmedAt();
+        view.updatedAt = order.updatedAt();
+        return view;
+    }
+
     @Getter
-    @Builder
-    @AllArgsConstructor(access = AccessLevel.PRIVATE)
     static class Line {
 
         private String productId;
@@ -64,6 +72,16 @@ class OrderView {
         }
 
         static Line from(OrderConfirmedEvent.Item item) {
+            Line line = new Line();
+            line.productId = item.productId().toString();
+            line.productName = item.productName();
+            line.unitPrice = new Decimal128(item.unitPrice());
+            line.quantity = item.quantity();
+            line.subtotal = new Decimal128(item.subtotal());
+            return line;
+        }
+
+        static Line from(ExportedOrder.Item item) {
             Line line = new Line();
             line.productId = item.productId().toString();
             line.productName = item.productName();

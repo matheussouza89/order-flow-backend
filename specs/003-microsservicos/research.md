@@ -97,7 +97,11 @@ Resilience4j 2.3.0, Testcontainers 2.0.5. Em 2026-10-24: Gatling 3.16.0 e
 ## R4. Erros na entrada única
 
 - **Decisão**: quando o serviço de destino não responde, o gateway devolve
-  `ErrorResponse`: 503 quando a conexão falha e 504 quando o tempo se esgota. A
+  `ErrorResponse`: 503 quando a conexão falha e 504 quando o tempo de resposta se
+  esgota. A conexão que não abre no prazo conta como falha de conexão: um
+  container parado mantém o IP no cache de DNS do gateway, e a conexão estoura o
+  tempo em vez de ser recusada. O `ConnectTimeoutException` do HttpClient 5
+  estende `SocketTimeoutException`, então a tradução o separa explicitamente. A
   mesma regra vale para o serviço que chama outro: o `cart` devolve 503 em
   `ErrorResponse` quando o `orders` ou o `catalog` falham.
 - **Motivo**: o FR-001 e o princípio VI pedem um formato de erro só. Sem tratamento,
@@ -113,6 +117,14 @@ Resilience4j 2.3.0, Testcontainers 2.0.5. Em 2026-10-24: Gatling 3.16.0 e
   configurada (desenvolvimento e testes), o emissor gera um par ao subir. O
   cabeçalho leva `kid`. Até a User Story 6, o emissor é o monólito. Claims mantidas:
   `iss` (`orderflow`), `sub` (id do usuário), `roles`, `iat`, `exp`.
+- **Cache das chaves públicas**: o decoder dos serviços que só validam é montado sobre
+  o `JWKSourceBuilder` do Nimbus, com cache de 15 minutos, a validade do token, e
+  tolerância a queda do emissor pelo mesmo prazo: se a busca falha, as últimas
+  chaves boas continuam valendo. O limite de frequência do Nimbus, ligado por
+  padrão, impede que tokens com `kid` desconhecido forcem uma busca por
+  requisição. O decoder é uma auto-configuração do `platform-security`, que só
+  entra quando o serviço não declara o próprio `JwtDecoder`; o emissor declara o
+  seu até a US6.
 - **Motivo**: com HS256, todo serviço que valida tem o segredo e poderia emitir
   credenciais (FR-004). Gerar a chave ao subir evita versionar chave privada, o
   que o GitGuardian já apontou com os padrões de desenvolvimento. A troca não exige
@@ -121,16 +133,24 @@ Resilience4j 2.3.0, Testcontainers 2.0.5. Em 2026-10-24: Gatling 3.16.0 e
 - **Alternativas consideradas**: manter HS256 (viola o FR-004); Spring
   Authorization Server (servidor OAuth2 completo, muito além do necessário);
   aceitar HS256 e RS256 juntos por 15 minutos (mais código para uma janela que o
-  refresh já cobre).
+  refresh já cobre). Para o cache: o decoder que o Boot monta por `jwk-set-uri`,
+  cujo cache padrão dura 5 minutos, menos que o token; o mesmo decoder com um
+  `Cache` do Spring sem prazo, por um `JwkSetUriJwtDecoderBuilderCustomizer`, que
+  foi implementado e descartado porque, ao receber um `kid` desconhecido, esvazia o
+  cache antes de buscar de novo: com o emissor fora do ar, um único token forjado
+  fazia todo token válido receber 401 (o `PublicKeyCacheTest` cobre o caso).
 
 ## R6. Chamadas entre serviços
 
 - **Decisão**: interfaces HTTP declarativas do Spring Framework 7
-  (`@HttpExchange`) sobre `RestClient`, com URL base e timeouts por configuração.
-  O `RestClient` sai do `RestClient.Builder` do Boot, que já aplica a observação
-  do rastreamento; um cliente criado à mão não propaga o `traceparent`. Um
-  interceptor em `platform` repassa o cabeçalho `Authorization` da requisição
-  recebida (FR-014). Circuit breaker do Resilience4j, já usado no gateway de
+  (`@HttpExchange`), registradas por `@ImportHttpServices` num grupo por serviço
+  chamado, com URL base e timeouts em `spring.http.serviceclient.<grupo>`. O Boot
+  monta o `RestClient` de cada grupo com os customizadores de sempre, inclusive a
+  observação do rastreamento; um cliente criado à mão não propaga o `traceparent`.
+  Um interceptor em `platform` repassa como `Authorization` o token que autenticou
+  a requisição, lido do `SecurityContext` (FR-014). Ele é aplicado a cada grupo
+  por um `RestClientHttpServiceGroupConfigurer`, e não como customizador global,
+  que o poria também nos clientes de terceiros, como o gateway de pagamento. Circuit breaker do Resilience4j, já usado no gateway de
   pagamento, com `ignore-exceptions: HttpClientErrorException` e fallback
   declarado só para falha de conexão, tempo esgotado, 5xx e circuito aberto. O
   `ignore-exceptions` só tira a exceção da contagem, e o fallback é escolhido pelo
@@ -252,7 +272,13 @@ Resilience4j 2.3.0, Testcontainers 2.0.5. Em 2026-10-24: Gatling 3.16.0 e
   a `ADMIN`, com itens, status e versão. O `sales` expõe
   `POST /admin/sales/rebuild`, restrito a `ADMIN`, que repassa a credencial do
   administrador e grava com a mesma guarda de versão de hoje. A flag de
-  inicialização `--orderflow.views.rebuild=true` deixa de existir.
+  inicialização `--orderflow.views.rebuild=true` deixa de existir. A exportação
+  mantém as regras da reconstrução antiga: o momento da confirmação vem da
+  mensagem `order.confirmed` do outbox, com a criação do pedido para os que foram
+  confirmados antes do outbox, e um cancelado só entra se foi confirmado. O
+  `rebuilt` conta os documentos gravados; um pedido que a projeção já tem na mesma
+  versão ou numa mais nova não conta, então uma reconstrução sem nada a corrigir
+  responde 0.
 - **Motivo**: a reconstrução de hoje lê `orders`, `order_items` e
   `outbox_messages` direto no banco (viola o FR-003) e roda na inicialização, sem
   usuário (incompatível com o FR-014). As duas rotas novas acrescentam, sem mudar

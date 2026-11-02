@@ -20,7 +20,7 @@ class DocumentationE2E extends AbstractE2E {
             "/orders", "/orders/{id}", "/orders/{id}/confirm", "/orders/{id}/ship",
             "/orders/{id}/deliver", "/orders/{id}/cancel",
             "/payments/{id}", "/payments/orders/{orderId}",
-            "/admin/sales/daily", "/admin/sales/top-products");
+            "/admin/sales/daily", "/admin/sales/top-products", "/admin/sales/rebuild");
 
     private static List<Map<String, String>> serviceEntries() {
         HttpResponse<String> config = get("/v3/api-docs/swagger-config", null);

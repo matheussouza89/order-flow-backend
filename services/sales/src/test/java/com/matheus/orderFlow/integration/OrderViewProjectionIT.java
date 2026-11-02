@@ -1,7 +1,6 @@
 package com.matheus.orderFlow.integration;
 
 import com.matheus.orderFlow.contracts.order.OrderFacts;
-import com.jayway.jsonpath.JsonPath;
 import com.matheus.orderFlow.contracts.order.OrderConfirmedEvent;
 import com.matheus.orderFlow.contracts.order.OrderDeliveredEvent;
 import com.matheus.orderFlow.contracts.order.OrderShippedEvent;
@@ -14,9 +13,6 @@ import org.springframework.amqp.core.Message;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.mongodb.core.MongoTemplate;
-import org.springframework.http.MediaType;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.test.web.servlet.MockMvc;
 
 import java.math.BigDecimal;
 import java.time.Duration;
@@ -27,8 +23,6 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.*;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 class OrderViewProjectionIT extends AbstractIntegrationTest {
 
@@ -37,16 +31,10 @@ class OrderViewProjectionIT extends AbstractIntegrationTest {
             "_id", "_class", "userId", "status", "total", "items", "version", "confirmedAt", "updatedAt");
 
     @Autowired
-    private MockMvc mockMvc;
-
-    @Autowired
     private MongoTemplate mongoTemplate;
 
     @Autowired
     private RabbitTemplate rabbitTemplate;
-
-    @Autowired
-    private JdbcTemplate jdbcTemplate;
 
     @Test
     void shouldApplyTheSameConfirmationOnlyOnce() {
@@ -93,49 +81,31 @@ class OrderViewProjectionIT extends AbstractIntegrationTest {
     }
 
     @Test
-    void shouldFollowTheOrderThroughEachTransition() throws Exception {
-        String orderId = createOrder(createProduct("Teclado", "100.00"));
-        transition(orderId, "confirm");
-        transition(orderId, "ship");
+    void shouldFollowTheOrderThroughEachTransition() {
+        UUID orderId = UUID.randomUUID();
+        publish(OrderFacts.CONFIRMED_KEY, confirmed(orderId, 1L));
+        publish(OrderFacts.SHIPPED_KEY, new OrderShippedEvent(orderId, 2L, Instant.now()));
+        publish(OrderFacts.DELIVERED_KEY, new OrderDeliveredEvent(orderId, 3L, Instant.now()));
 
-        UUID id = UUID.fromString(orderId);
         Awaitility.await().atMost(Duration.ofSeconds(40)).until(() -> {
-            Document view = viewOf(id);
-            return view != null && "SHIPPED".equals(view.getString("status"));
+            Document view = viewOf(orderId);
+            return view != null && "DELIVERED".equals(view.getString("status"));
         });
 
-        assertEquals("SHIPPED", jdbcTemplate.queryForObject("SELECT status FROM orders", String.class));
-        assertEquals(
-                jdbcTemplate.queryForObject("SELECT version FROM orders", Long.class),
-                viewOf(id).getLong("version"));
+        assertEquals(3L, viewOf(orderId).getLong("version"));
     }
 
     @Test
-    void shouldKeepTheItemsAsTheOrderHadThemWhenConfirmed() throws Exception {
-        String productId = createProduct("Teclado", "100.00");
-        String orderId = createOrder(productId);
+    void shouldKeepTheItemsAsTheConfirmationCarriedThem() {
+        UUID orderId = UUID.randomUUID();
+        publish(OrderFacts.CONFIRMED_KEY, confirmed(orderId, 1L));
+        awaitView(orderId);
 
-        mockMvc.perform(put("/products/{id}", productId)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {
-                                    "name": "Teclado",
-                                    "description": "Descricao",
-                                    "price": 500.00
-                                }
-                                """))
-                .andExpect(status().isOk());
-
-        transition(orderId, "confirm");
-
-        UUID id = UUID.fromString(orderId);
-        awaitView(id);
-
-        Document line = viewOf(id).getList("items", Document.class).get(0);
+        Document line = viewOf(orderId).getList("items", Document.class).get(0);
         assertEquals("Teclado", line.getString("productName"));
+        assertEquals(1, line.getInteger("quantity"));
         assertThat(((Decimal128) line.get("unitPrice")).bigDecimalValue()).isEqualByComparingTo("100.00");
-        assertThat(jdbcTemplate.queryForObject("SELECT unit_price FROM order_items", BigDecimal.class))
-                .isEqualByComparingTo("100.00");
+        assertThat(((Decimal128) line.get("subtotal")).bigDecimalValue()).isEqualByComparingTo("100.00");
     }
 
     @Test
@@ -194,42 +164,5 @@ class OrderViewProjectionIT extends AbstractIntegrationTest {
             found |= new String(message.getBody()).contains(orderId.toString());
         }
         return found;
-    }
-
-    private String createProduct(String name, String price) throws Exception {
-        String response = mockMvc.perform(post("/products")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {
-                                    "name": "%s",
-                                    "description": "Descricao",
-                                    "price": %s
-                                }
-                                """.formatted(name, price)))
-                .andExpect(status().isCreated())
-                .andReturn()
-                .getResponse()
-                .getContentAsString();
-
-        return JsonPath.read(response, "$.id");
-    }
-
-    private String createOrder(String productId) throws Exception {
-        String response = mockMvc.perform(post("/orders")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                { "items": [ { "productId": "%s", "quantity": 1 } ] }
-                                """.formatted(productId)))
-                .andExpect(status().isCreated())
-                .andReturn()
-                .getResponse()
-                .getContentAsString();
-
-        return JsonPath.read(response, "$.id");
-    }
-
-    private void transition(String orderId, String action) throws Exception {
-        mockMvc.perform(post("/orders/{id}/{action}", orderId, action))
-                .andExpect(status().isOk());
     }
 }

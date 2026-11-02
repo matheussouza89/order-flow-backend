@@ -1,6 +1,7 @@
 package com.matheus.orderFlow.sales;
 
 import com.matheus.orderFlow.contracts.order.OrderFacts;
+import com.matheus.orderFlow.shared.messaging.FactTypes;
 import com.matheus.orderFlow.shared.messaging.RabbitMqConfig;
 import org.springframework.amqp.core.Binding;
 import org.springframework.amqp.core.BindingBuilder;
@@ -21,6 +22,11 @@ class SalesMessagingConfig {
     static final String DEFERRALS_HEADER = "projection-deferrals";
     static final int DEFERRAL_MILLIS = 10_000;
     static final int MAX_DEFERRALS = 9;
+
+    @Bean
+    FactTypes factTypes() {
+        return new FactTypes(OrderFacts.TYPES, OrderFacts.LEGACY_TYPES);
+    }
 
     @Bean
     Queue orderViewsProjectionQueue() {

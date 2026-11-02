@@ -4,6 +4,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.data.core.PropertyReferenceException;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -102,13 +103,22 @@ public class GlobalExceptionHandler {
         return ResponseEntity.badRequest().body(response);
     }
 
-    @ExceptionHandler(HttpClientErrorException.Unauthorized.class)
-    public ResponseEntity<ErrorResponse> handleUnauthorizedException(
-            HttpClientErrorException.Unauthorized exception
-    ) {
-        ErrorResponse response = new ErrorResponse(401, exception.getMessage());
+    @ExceptionHandler(HttpClientErrorException.class)
+    public ResponseEntity<byte[]> handleCalledServiceError(HttpClientErrorException exception) {
+        log.warn("Called service answered {}", exception.getStatusCode());
 
-        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
+        return ResponseEntity.status(exception.getStatusCode())
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(exception.getResponseBodyAsByteArray());
+    }
+
+    @ExceptionHandler(ServiceUnavailableException.class)
+    public ResponseEntity<ErrorResponse> handleServiceUnavailable(ServiceUnavailableException exception) {
+        log.warn("{}: {}", exception.getMessage(), exception.getCause().getMessage());
+
+        ErrorResponse response = new ErrorResponse(503, exception.getMessage());
+
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(response);
     }
 
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
