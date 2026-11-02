@@ -51,7 +51,7 @@ formato de sempre (`status`, `message`, `errors`):
 
 | Situação | Status | `message` |
 |---|---|---|
-| conexão recusada ou serviço fora do ar | 503 | `Service unavailable` |
+| conexão recusada, não aberta em 1 s ou serviço fora do ar | 503 | `Service unavailable` |
 | tempo de resposta esgotado (4,5 s) | 504 | `Service did not respond in time` |
 
 O gateway preserva o cabeçalho `Host` da requisição. O serviço monta o `Location`

@@ -2,6 +2,7 @@ package com.matheus.orderFlow.gateway;
 
 import com.matheus.orderFlow.shared.exception.ErrorResponse;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.hc.client5.http.ConnectTimeoutException;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpStatus;
@@ -12,7 +13,6 @@ import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.net.SocketTimeoutException;
-import java.net.http.HttpTimeoutException;
 
 @Slf4j
 @RestControllerAdvice
@@ -21,9 +21,7 @@ class UpstreamErrorHandling {
 
     @ExceptionHandler(ResourceAccessException.class)
     ResponseEntity<ErrorResponse> handleUnreachableService(ResourceAccessException exception) {
-        Throwable cause = exception.getMostSpecificCause();
-
-        if (cause instanceof HttpTimeoutException || cause instanceof SocketTimeoutException) {
+        if (exception.contains(SocketTimeoutException.class) && !exception.contains(ConnectTimeoutException.class)) {
             log.warn("Service did not respond in time: {}", exception.getMessage());
 
             return respond(HttpStatus.GATEWAY_TIMEOUT, "Service did not respond in time");

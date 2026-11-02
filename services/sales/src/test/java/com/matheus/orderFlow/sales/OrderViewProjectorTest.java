@@ -5,10 +5,10 @@ import com.matheus.orderFlow.contracts.order.OrderConfirmedEvent;
 import com.matheus.orderFlow.contracts.order.OrderShippedEvent;
 import com.matheus.orderFlow.shared.messaging.RabbitMqConfig;
 import com.mongodb.client.result.UpdateResult;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.amqp.core.Message;
@@ -45,8 +45,12 @@ class OrderViewProjectorTest {
     @Mock
     private RabbitTemplate rabbitTemplate;
 
-    @InjectMocks
     private OrderViewProjector projector;
+
+    @BeforeEach
+    void createTheProjector() {
+        projector = new OrderViewProjector(mongoTemplate, new OrderViewStore(mongoTemplate), rabbitTemplate);
+    }
 
     @Test
     void shouldDiscardConfirmationWithoutSnapshotWithoutTouchingMongo() {

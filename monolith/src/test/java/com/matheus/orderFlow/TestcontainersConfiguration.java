@@ -4,8 +4,6 @@ import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.context.annotation.Bean;
 import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.containers.wait.strategy.Wait;
-import org.testcontainers.mongodb.MongoDBContainer;
 import org.testcontainers.mysql.MySQLContainer;
 import org.testcontainers.rabbitmq.RabbitMQContainer;
 import org.testcontainers.utility.DockerImageName;
@@ -29,13 +27,6 @@ public class TestcontainersConfiguration {
 	@ServiceConnection(name = "redis")
 	GenericContainer<?> redisContainer() {
 		return new GenericContainer<>(DockerImageName.parse("redis:latest")).withExposedPorts(6379);
-	}
-
-	@Bean
-	@ServiceConnection
-	MongoDBContainer mongoContainer() {
-		return new MongoDBContainer(DockerImageName.parse("mongo:7"))
-				.waitingFor(Wait.forLogMessage("(?i).*waiting for connections.*", 1));
 	}
 
 }

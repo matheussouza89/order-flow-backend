@@ -13,7 +13,9 @@ class DirectCallWithoutCredentialE2E extends AbstractE2E {
 
     @ParameterizedTest(name = "{0}{1}")
     @CsvSource({
-            "monolith, /orders"
+            "monolith, /orders",
+            "monolith, /internal/orders/export",
+            "sales, /admin/sales/top-products"
     })
     void shouldRefuseADirectCallWithoutCredential(String service, String protectedPath) {
         assertEquals(401, send(HttpRequest.newBuilder(service(service, protectedPath)).GET()).statusCode());
@@ -21,7 +23,9 @@ class DirectCallWithoutCredentialE2E extends AbstractE2E {
 
     @ParameterizedTest(name = "{0}{1}")
     @CsvSource({
-            "monolith, /orders"
+            "monolith, /orders",
+            "monolith, /internal/orders/export",
+            "sales, /admin/sales/top-products"
     })
     void shouldRefuseADirectCallWithATokenSignedByAnotherKey(String service, String protectedPath) {
         HttpRequest.Builder request = HttpRequest.newBuilder(service(service, protectedPath))

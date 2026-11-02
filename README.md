@@ -12,11 +12,13 @@ resiliência, com autenticação por JWT, rotas protegidas por papel e recursos
 vinculados ao usuário do token (ver [Roadmap](#roadmap)).
 
 Está em andamento a separação em microsserviços, especificada em
-[specs/003-microsservicos](specs/003-microsservicos/spec.md). A primeira etapa
-está pronta: o cliente entra por um gateway, a credencial é verificável por
-qualquer serviço sem que ele consiga emiti-la, e o rastro de uma requisição
-atravessa serviços e mensagens. O sistema ainda roda num monólito atrás do
-gateway, que perde uma capacidade por etapa.
+[specs/003-microsservicos](specs/003-microsservicos/spec.md). Duas etapas estão
+prontas. Na primeira, o cliente passou a entrar por um gateway, a credencial
+ficou verificável por qualquer serviço sem que ele consiga emiti-la, e o rastro
+de uma requisição atravessa serviços e mensagens. Na segunda, os relatórios de
+vendas viraram o primeiro serviço próprio, alimentado só pelos fatos dos
+pedidos. O resto ainda roda num monólito atrás do gateway, que perde uma
+capacidade por etapa.
 
 ---
 
@@ -29,8 +31,9 @@ gateway, que perde uma capacidade por etapa.
 | Banco | MySQL 8.4 + Flyway |
 | Mensageria | RabbitMQ |
 | Dado efêmero | Redis (carrinho e refresh tokens, com TTL) |
-| Leitura de vendas | MongoDB (projeção de pedidos, com Spring Data MongoDB) |
+| Leitura de vendas | MongoDB (projeção de pedidos no serviço `sales`, com Spring Data MongoDB) |
 | Entrada única | Spring Cloud Gateway Server WebMVC |
+| Chamadas entre serviços | interfaces HTTP do Spring (`@HttpExchange`) sobre `RestClient` |
 | Documentação | springdoc-openapi (Swagger UI) |
 | Resiliência | Resilience4j |
 | Segurança | Spring Security + JWT RS256 com JWKS (oauth2-resource-server) |
@@ -44,15 +47,16 @@ gateway, que perde uma capacidade por etapa.
 
 **Pré-requisito:** Docker.
 
-Suba o projeto inteiro — gateway, monólito, MySQL, MongoDB, Redis, RabbitMQ,
-WireMock e Zipkin:
+Suba o projeto inteiro — gateway, monólito, serviço de vendas, MySQL, MongoDB,
+Redis, RabbitMQ, WireMock e Zipkin:
 
 ```bash
 docker compose up --build
 ```
 
-Só o gateway publica a porta 8080. O monólito fica na rede interna, e uma
-chamada direta a ele sem credencial é recusada como qualquer outra.
+Só o gateway publica a porta 8080. O monólito e o serviço de vendas ficam na
+rede interna, e uma chamada direta a eles sem credencial é recusada como
+qualquer outra.
 
 Um único Dockerfile constrói qualquer módulo, escolhido pelo argumento `MODULE`.
 O primeiro estágio compila com Maven só o módulo e as bibliotecas de que ele
@@ -80,10 +84,11 @@ docker compose exec -T mysql mysql -uroot -proot < docker/mysql/init/01-schemas.
 ```
 
 Para desenvolver com o monólito fora do container (Java 21 necessário), suba
-só a infraestrutura e rode o módulo pelo Maven. Ele atende direto na porta 8080:
+só a infraestrutura e rode o módulo pelo Maven. Ele atende direto na porta 8080
+e não precisa do MongoDB, que agora é só do serviço de vendas:
 
 ```bash
-docker compose up -d mysql mongo redis rabbitmq zipkin
+docker compose up -d mysql redis rabbitmq zipkin
 ```
 
 ```bash
@@ -108,37 +113,40 @@ alteração:
 ./mvnw test
 ```
 
-Roda os **250 testes unitários** em poucos segundos, sem Docker.
+Roda os **263 testes unitários** em poucos segundos, sem Docker.
 
 ```bash
 ./mvnw verify
 ```
 
-Roda os unitários **mais os 162 de integração**, que sobem MySQL, MongoDB, Redis e
+Roda os unitários **mais os 178 de integração**, que sobem MySQL, MongoDB, Redis e
 RabbitMQ reais via Testcontainers, e um WireMock fazendo as vezes do gateway de
-pagamento ou do serviço atrás da entrada única.
+pagamento, do serviço atrás da entrada única ou da exportação de pedidos.
 
 ```bash
 ./mvnw verify -Pe2e -pl e2e -am
 ```
 
-Roda os **10 testes ponta a ponta**, que constroem as imagens, sobem o Compose
+Roda os **16 testes ponta a ponta**, que constroem as imagens, sobem o Compose
 inteiro pelo Testcontainers e falam com o sistema pela porta 8080, como um
 cliente. São eles que provam o que só aparece com os serviços juntos: todas as
-rotas respondendo pela entrada única, a chamada direta sem credencial recusada e
-a documentação única cobrindo todas as rotas. Usam as mesmas portas do Compose,
+rotas respondendo pela entrada única, a chamada direta sem credencial recusada,
+a documentação única cobrindo todas as rotas e os pedidos confirmados com o
+serviço de vendas parado. Usam as mesmas portas do Compose,
 então a pilha de desenvolvimento precisa estar parada.
 
 | Módulo | Unitários | Integração | Ponta a ponta |
 |---|---|---|---|
-| `monolith` | 219 | 142 | — |
-| `gateway` | — | 20 | — |
+| `monolith` | 214 | 131 | — |
+| `sales` | 5 | 26 | — |
+| `gateway` | 2 | 21 | — |
 | `platform-outbox` | 16 | — | — |
 | `contracts` | 7 | — | — |
+| `platform-web` | 6 | — | — |
+| `platform-security` | 6 | — | — |
 | `platform-messaging` | 5 | — | — |
 | `platform-test` | 2 | — | — |
-| `platform-web` | 1 | — | — |
-| `e2e` | — | — | 10 |
+| `e2e` | — | — | 16 |
 
 A separação é feita por convenção de nome: o Surefire pega só `*Test.java`, o
 Failsafe pega `*IT.java`. O teste que sobe o contexto inteiro se chama
@@ -204,7 +212,7 @@ com.matheus.orderFlow/
 ├── cart/             Cart, CartService, CartRepository, CartController, DTOs
 ├── order/            Order, OrderItem, OrderStatus, OrderService, OrderController, DTOs
 ├── payment/          Payment, PaymentService, PaymentProcessor, gateway e listener, DTOs
-├── sales/            projeção de pedidos em MongoDB e relatórios de vendas
+├── sales/            relatórios de vendas, hoje no serviço próprio (services/sales)
 └── shared/
     ├── config/       configuração da aplicação
     ├── messaging/    exchange e conversor compartilhados
@@ -565,6 +573,16 @@ antigo, HS256, passou a receber 401, e o refresh token, que é opaco e guardado
 no Redis, gera um par novo sem pedir senha. Aceitar os dois algoritmos por quinze
 minutos seria código a mais para uma janela que o refresh já cobre.
 
+Os serviços que só validam guardam as chaves públicas por quinze minutos, a
+validade do token, e continuam com as últimas chaves boas se o emissor cair. A
+primeira tentativa usou o cache do decoder que o Boot monta, com um cache do
+Spring sem prazo, e um teste derrubou: quando chega um token com `kid`
+desconhecido, esse decoder esvazia o cache antes de buscar as chaves de novo.
+Com o emissor fora do ar, um único token forjado fazia todo token válido receber
+401. O decoder agora usa o `JWKSourceBuilder` do Nimbus, que tem tolerância a
+queda e limita a frequência das buscas, então um `kid` inventado também não vira
+uma requisição ao emissor por chamada.
+
 ### O primeiro administrador nasce fora do cadastro
 
 Promover alguém a `ADMIN` exige ser `ADMIN` — e no banco vazio não existe
@@ -843,8 +861,8 @@ competem com elas. A projeção separa essa leitura: um documento por pedido, em
 MongoDB, alimentado pelos eventos do RabbitMQ.
 
 O MySQL continua sendo a única fonte de verdade. A projeção não recebe regra de
-negócio e pode ser apagada e reconstruída a partir do MySQL, com
-`--orderflow.views.rebuild=true`.
+negócio e pode ser apagada e reconstruída a partir dos pedidos, com
+`POST /admin/sales/rebuild`.
 
 Eventos repetidos ou fora de ordem são tratados pela versão do pedido: a mesma
 confirmação não duplica o documento, e um evento antigo não faz o status
@@ -923,6 +941,18 @@ Quando o serviço de destino não responde, a entrada devolve `ErrorResponse`:
 abaixo dos 5 segundos que a especificação admite para uma falha no checkout.
 Erros produzidos pelos serviços passam sem alteração.
 
+Uma conexão que não abre em 1 segundo também é 503. O teste ponta a ponta que
+para o serviço de vendas mostrou o caso: o gateway guarda o IP do container no
+cache de DNS do Java, e com o container parado ninguém responde nesse IP, então
+a conexão estoura o tempo em vez de ser recusada. No HttpClient 5, o
+`ConnectTimeoutException` estende `SocketTimeoutException`, e a tradução
+respondia 504, como se o serviço estivesse só lento.
+
+O mesmo cache tem um segundo efeito, que só o CI mostrou: quando o serviço volta
+com outro IP, a entrada leva até 30 segundos, o prazo padrão do cache, para
+alcançá-lo. Na máquina local o container voltava com o mesmo IP e o efeito não
+aparecia.
+
 O gateway preserva o cabeçalho `Host`. O serviço monta o `Location` das respostas
 201 e o endereço do "Try it out" da documentação como montava antes da entrada
 única. A alternativa, confiar em `X-Forwarded-*`, exigiria aceitar esses
@@ -966,6 +996,32 @@ Um detalhe custou tempo e vale registrar: no Boot 4.1, a propagação do Brave s
 existe com o envio dos rastros ligado. Os testes desligam o envio por padrão e,
 com ele, a propagação; o teste que prova o rastro liga o envio com
 `@AutoConfigureTracing` e desliga só o exportador do Zipkin.
+
+### Relatórios de vendas, o primeiro serviço
+
+Os relatórios saíram primeiro porque já eram a parte mais solta do monólito: só
+consumiam os fatos dos pedidos, sem chamar ninguém. O serviço `sales` tem o
+próprio MongoDB e fila própria no RabbitMQ, e não lê nada do banco dos pedidos.
+Com ele fora do ar, os pedidos continuam sendo confirmados normalmente; os fatos
+esperam na fila e entram nos relatórios quando o serviço volta, cada um uma vez
+só, pela mesma guarda de versão de antes.
+
+A reconstrução foi o que mudou. Antes, uma opção de inicialização lia `orders`,
+`order_items` e `outbox_messages` direto no MySQL, o que um serviço separado não
+pode fazer, e rodava sem usuário. Agora é `POST /admin/sales/rebuild`, chamada
+por um administrador: o `sales` busca os pedidos confirmados, página a página,
+em `GET /internal/orders/export` do monólito, repassando a credencial de quem
+chamou. Nada é apagado antes, e um documento só é substituído por dado mais
+novo, então os relatórios continuam respondendo enquanto ela roda. A rota de
+exportação fica em `/internal`, que a entrada única não repassa, e exige o papel
+`ADMIN` também lá dentro, porque estar na rede interna não é credencial.
+
+A chamada usa uma interface `@HttpExchange` registrada num grupo do Boot, com URL
+e timeout por propriedade, e o Boot monta o cliente com o rastreamento ligado. O
+repasse da credencial é aplicado só ao grupo dos serviços internos: num
+customizador global, o token do usuário iria também para o gateway de pagamento,
+que é de terceiros. Se o monólito não responde, a reconstrução devolve 503; se
+recusa, o mesmo status e o mesmo corpo chegam ao administrador.
 
 ## Endpoints
 
@@ -1070,9 +1126,12 @@ Nome, preço e total vêm do catálogo e do domínio — nunca do cliente.
 |---|---|---|---|
 | `GET` | `/admin/sales/daily?from=&to=` | 200 / 400 / 403 | Total por dia de confirmação, no fuso de São Paulo |
 | `GET` | `/admin/sales/top-products?limit=` | 200 / 400 / 403 | Produtos mais vendidos, por quantidade |
+| `POST` | `/admin/sales/rebuild` | 200 / 403 / 503 | Reconstrói a projeção a partir dos pedidos |
 
 Pedidos cancelados ficam fora dos totais. Os relatórios vêm da projeção, com
-alguns segundos de atraso em relação ao pedido.
+alguns segundos de atraso em relação ao pedido. A reconstrução devolve
+`{"rebuilt": n}`, o número de pedidos gravados; os que a projeção já tinha na
+mesma versão não contam.
 
 ---
 
@@ -1097,11 +1156,13 @@ alguns segundos de atraso em relação ao pedido.
 - [x] Refresh token rotativo no Redis, com detecção de reuso e logout
 - [x] Projeção de pedidos em MongoDB, com upsert guardado por versão
 - [x] Fila de espera e DLQ para status que chega antes da confirmação
-- [x] Reconstrução da projeção a partir do MySQL
+- [x] Reconstrução da projeção pela exportação do serviço de pedidos
 - [x] Relatórios administrativos de vendas por dia e por produto
-- [x] 422 testes, separados por velocidade (unitários, integração e ponta a ponta)
+- [x] 457 testes, separados por velocidade (unitários, integração e ponta a ponta)
 - [x] Separação em serviços, etapa 1: entrada única, credencial RS256 com JWKS,
   fatos com tipo versionado, rastreamento com Zipkin e linha de base de carga
+- [x] Separação em serviços, etapa 2: relatórios de vendas como serviço próprio,
+  com reconstrução pela exportação dos pedidos
 - [x] Pipeline de CI rodando `mvn verify` a cada push
 - [x] Imagem da aplicação e stack completa em Docker, com conexões por variável de ambiente
 - [x] Documentação OpenAPI

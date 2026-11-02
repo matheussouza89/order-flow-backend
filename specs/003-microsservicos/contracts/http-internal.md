@@ -9,7 +9,7 @@ separação acrescenta. Decisões em [research.md](../research.md), R5, R6, R7 e
   O serviço chamado valida a credencial e aplica as mesmas regras de acesso de uma
   requisição externa.
 - O cabeçalho `traceparent` é propagado pela biblioteca de rastreamento (FR-016),
-  com o cliente criado a partir do `RestClient.Builder` do Boot.
+  com o cliente das interfaces HTTP montado pelo Boot (`@ImportHttpServices`).
 - Falha de conexão, tempo esgotado ou 5xx do serviço chamado vira 503 em
   `ErrorResponse` para quem chamou, dentro do tempo da cadeia (SC-003).
 - Uma resposta 4xx do serviço chamado chega a quem chamou com o mesmo status e o
@@ -56,7 +56,8 @@ Serviço: `orders`. Rede interna. Papel `ADMIN`.
 
 Parâmetros: `page` (a partir de 0) e `size` (1 a 500, padrão 100).
 
-Resposta 200: `PageResponse` com os pedidos que já foram confirmados:
+Resposta 200: `PageResponse` com os pedidos que já foram confirmados, em ordem de
+criação. Um cancelado só entra se foi confirmado antes de cancelar.
 
 | Campo | Tipo |
 |---|---|
@@ -64,11 +65,13 @@ Resposta 200: `PageResponse` com os pedidos que já foram confirmados:
 | `userId` | UUID |
 | `status` | `CONFIRMED`, `SHIPPED`, `DELIVERED` ou `CANCELLED` |
 | `total` | decimal |
-| `items` | `productId`, `productName`, `unitPrice`, `quantity`, `subtotal` |
+| `items` | `id`, `productId`, `productName`, `unitPrice`, `quantity`, `subtotal` |
 | `version` | inteiro |
-| `confirmedAt` | instante (UTC) |
+| `confirmedAt` | instante (UTC): o `occurredAt` do fato `order.confirmed`; para pedidos confirmados antes do outbox, a criação do pedido |
+| `updatedAt` | instante (UTC) |
 
-Erros: 401 sem credencial; 403 sem papel `ADMIN`; 400 para `size` fora do limite.
+Erros: 401 sem credencial; 403 sem papel `ADMIN`; 400 para `size` fora do limite
+ou `page` negativa.
 
 ## `POST /admin/sales/rebuild`
 
@@ -80,10 +83,12 @@ guarda de versão dos fatos, então um documento só é substituído por dados m
 novos, e os relatórios continuam respondendo durante o processo. Funciona igual
 com a projeção vazia.
 
-Resposta 200: `{ "rebuilt": <quantidade de pedidos> }`.
+Resposta 200: `{ "rebuilt": <quantidade de pedidos gravados> }`. Um pedido que a
+projeção já tem na mesma versão ou numa mais nova não conta.
 
 Erros: 401; 403 sem papel `ADMIN`; 503 em `ErrorResponse` se o `orders` estiver
-fora do ar. Uma reconstrução interrompida pode ser repetida do início.
+fora do ar ou responder 5xx; um 4xx da exportação chega com o mesmo status e
+corpo. Uma reconstrução interrompida pode ser repetida do início.
 
 Substitui a flag de inicialização `--orderflow.views.rebuild=true`, que deixa de
 existir.

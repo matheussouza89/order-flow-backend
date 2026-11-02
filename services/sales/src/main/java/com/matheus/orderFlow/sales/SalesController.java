@@ -10,6 +10,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -26,6 +27,7 @@ import java.util.List;
 @RequiredArgsConstructor
 class SalesController {
     private final SalesService salesService;
+    private final SalesRebuildService salesRebuildService;
 
     @Operation(summary = "Daily sales",
             description = "Sums the totals of non-cancelled orders by the day of confirmation, in "
@@ -57,5 +59,27 @@ class SalesController {
     @GetMapping("/top-products")
     public List<TopProductResponse> topProducts(@RequestParam(defaultValue = "10") int limit) {
         return salesService.topProducts(limit);
+    }
+
+    @Operation(summary = "Rebuild the reports",
+            description = """
+                    Rebuilds the view behind the reports from the orders service, page by page,
+                    on behalf of the calling administrator. Nothing is deleted first: a stored
+                    order is replaced only by newer data, so the reports keep answering while it
+                    runs. `rebuilt` counts the orders written; those the view already had at the
+                    same or a newer version are not counted. An interrupted rebuild can be
+                    started again from the beginning.""")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "View rebuilt"),
+            @ApiResponse(responseCode = "403", description = "Only administrators can do this",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "503", description = "The orders service did not answer; nothing was lost, "
+                    + "and the rebuild can be retried",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    @PreAuthorize("hasRole('ADMIN')")
+    @PostMapping("/rebuild")
+    public RebuildResponse rebuild() {
+        return new RebuildResponse(salesRebuildService.rebuild());
     }
 }

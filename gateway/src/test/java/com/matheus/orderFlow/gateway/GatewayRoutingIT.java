@@ -39,12 +39,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class GatewayRoutingIT {
     private static final WireMockServer MONOLITH = new WireMockServer(options().port(freePort()));
+    private static final WireMockServer SALES = new WireMockServer(options().port(freePort()));
     private static final String TOKEN = "Bearer any-token";
     private static final String CONFLICT = """
             {"status":409,"message":"Only pending orders can be confirmed","errors":{}}""";
 
     static {
         MONOLITH.start();
+        SALES.start();
     }
 
     private static int freePort() {
@@ -56,13 +58,15 @@ class GatewayRoutingIT {
     }
 
     @DynamicPropertySource
-    static void routeToTheFakeMonolith(DynamicPropertyRegistry registry) {
+    static void routeToTheFakeServices(DynamicPropertyRegistry registry) {
         registry.add("MONOLITH_URL", MONOLITH::baseUrl);
+        registry.add("SALES_URL", SALES::baseUrl);
     }
 
     @AfterAll
-    static void stopTheFakeMonolith() {
+    static void stopTheFakeServices() {
         MONOLITH.stop();
+        SALES.stop();
     }
 
     @LocalServerPort
@@ -71,8 +75,9 @@ class GatewayRoutingIT {
     private final HttpClient client = HttpClient.newHttpClient();
 
     @BeforeEach
-    void resetTheFakeMonolith() {
+    void resetTheFakeServices() {
         MONOLITH.resetAll();
+        SALES.resetAll();
     }
 
     private HttpResponse<String> send(HttpRequest.Builder request) throws IOException, InterruptedException {
@@ -104,11 +109,22 @@ class GatewayRoutingIT {
 
     @ParameterizedTest
     @ValueSource(strings = {"/auth/login", "/users/1", "/products", "/products/1", "/cart",
-            "/orders", "/payments/orders/1", "/admin/sales/daily"})
-    void shouldRouteEveryPublicPrefixToTheMonolith(String path) throws Exception {
+            "/orders", "/payments/orders/1"})
+    void shouldRouteThePrefixesStillInTheMonolithToIt(String path) throws Exception {
         MONOLITH.stubFor(WireMock.any(urlEqualTo(path)).willReturn(aResponse().withStatus(200)));
 
         assertEquals(200, send(to(path).GET()).statusCode());
+        SALES.verify(0, anyRequestedFor(anyUrl()));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"/admin/sales/daily?from=2026-10-10&to=2026-10-12", "/admin/sales/top-products"})
+    void shouldRouteTheSalesReportsToTheSalesService(String path) throws Exception {
+        SALES.stubFor(WireMock.any(urlEqualTo(path)).willReturn(aResponse().withStatus(200)));
+
+        assertEquals(200, send(to(path).header("Authorization", TOKEN).GET()).statusCode());
+        SALES.verify(anyRequestedFor(urlEqualTo(path)).withHeader("Authorization", equalTo(TOKEN)));
+        MONOLITH.verify(0, anyRequestedFor(anyUrl()));
     }
 
     @Test
@@ -134,6 +150,7 @@ class GatewayRoutingIT {
         assertEquals(404, response.statusCode());
         assertThat(response.body()).contains("\"status\":404");
         MONOLITH.verify(0, anyRequestedFor(anyUrl()));
+        SALES.verify(0, anyRequestedFor(anyUrl()));
     }
 
     @Test
