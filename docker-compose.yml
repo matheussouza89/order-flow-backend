@@ -9,6 +9,7 @@ services:
     environment:
       MONOLITH_URL: http://monolith:8080
       SALES_URL: http://sales:8080
+      PAYMENT_URL: http://payment:8080
       ZIPKIN_ENDPOINT: http://zipkin:9411/api/v2/spans
       JAVA_TOOL_OPTIONS: -Xmx256m
     ports:
@@ -23,6 +24,8 @@ services:
       monolith:
         condition: service_healthy
       sales:
+        condition: service_healthy
+      payment:
         condition: service_healthy
     networks:
       - orderflow-network
@@ -39,7 +42,6 @@ services:
       SPRING_DATASOURCE_PASSWORD: orderflow
       SPRING_DATA_REDIS_HOST: redis
       SPRING_RABBITMQ_HOST: rabbitmq
-      PAYMENT_GATEWAY_URL: http://wiremock:8080
       ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@orderflow.local}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-change-me-in-production}
       ZIPKIN_ENDPOINT: http://zipkin:9411/api/v2/spans
@@ -83,6 +85,37 @@ services:
       rabbitmq:
         condition: service_started
       mongo:
+        condition: service_started
+    networks:
+      - orderflow-network
+
+  payment:
+    build:
+      context: .
+      args:
+        MODULE: services/payment
+    restart: unless-stopped
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/payment
+      SPRING_DATASOURCE_USERNAME: payment
+      SPRING_DATASOURCE_PASSWORD: payment
+      SPRING_RABBITMQ_HOST: rabbitmq
+      PAYMENT_GATEWAY_URL: http://wiremock:8080
+      JWK_SET_URI: http://monolith:8080/.well-known/jwks.json
+      ZIPKIN_ENDPOINT: http://zipkin:9411/api/v2/spans
+      JAVA_TOOL_OPTIONS: -Xmx256m
+    healthcheck:
+      test: ["CMD", "curl", "-fs", "http://localhost:8080/actuator/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 40
+      start_period: 30s
+    depends_on:
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
+      wiremock:
         condition: service_started
     networks:
       - orderflow-network

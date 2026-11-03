@@ -108,19 +108,6 @@ class OutboxIT extends AbstractIntegrationTest {
     }
 
     @Test
-    void shouldReachTheConsumerThroughTheOutbox() throws Exception {
-        String orderId = createOrder();
-
-        mockMvc.perform(post("/orders/{id}/confirm", orderId))
-                .andExpect(status().isOk());
-
-        Awaitility.await()
-                .atMost(Duration.ofSeconds(15))
-                .untilAsserted(() -> mockMvc.perform(get("/payments/orders/{orderId}", orderId))
-                        .andExpect(status().isOk()));
-    }
-
-    @Test
     void shouldNotRecordAnythingWhenTheTransitionIsRejected() throws Exception {
         String orderId = createOrder();
 

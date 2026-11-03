@@ -1,0 +1,72 @@
+spring:
+  application:
+    name: payment
+
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3308/payment}
+    username: ${SPRING_DATASOURCE_USERNAME:payment}
+    password: ${SPRING_DATASOURCE_PASSWORD:payment}
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    baseline-version: 0
+
+  rabbitmq:
+    host: ${SPRING_RABBITMQ_HOST:localhost}
+    port: ${SPRING_RABBITMQ_PORT:5672}
+    username: ${SPRING_RABBITMQ_USERNAME:orderflow}
+    password: ${SPRING_RABBITMQ_PASSWORD:orderflow}
+    template:
+      observation-enabled: true
+    listener:
+      simple:
+        observation-enabled: true
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: ${JWK_SET_URI:http://monolith:8080/.well-known/jwks.json}
+
+management:
+  tracing:
+    sampling:
+      probability: 1.0
+    export:
+      zipkin:
+        endpoint: ${ZIPKIN_ENDPOINT:http://localhost:9411/api/v2/spans}
+
+orderflow:
+  payment:
+    gateway:
+      url: ${PAYMENT_GATEWAY_URL:http://localhost:8090}
+      connect-timeout: 2s
+      read-timeout: 3s
+
+resilience4j:
+  retry:
+    instances:
+      paymentGateway:
+        max-attempts: 3
+        wait-duration: 500ms
+        enable-exponential-backoff: true
+        exponential-backoff-multiplier: 2
+        retry-exceptions:
+          - org.springframework.web.client.ResourceAccessException
+          - org.springframework.web.client.HttpServerErrorException
+  circuitbreaker:
+    instances:
+      paymentGateway:
+        sliding-window-type: COUNT_BASED
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 2
+        automatic-transition-from-open-to-half-open-enabled: true

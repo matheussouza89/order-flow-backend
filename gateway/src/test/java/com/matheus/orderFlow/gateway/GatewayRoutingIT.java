@@ -40,6 +40,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class GatewayRoutingIT {
     private static final WireMockServer MONOLITH = new WireMockServer(options().port(freePort()));
     private static final WireMockServer SALES = new WireMockServer(options().port(freePort()));
+    private static final WireMockServer PAYMENT = new WireMockServer(options().port(freePort()));
     private static final String TOKEN = "Bearer any-token";
     private static final String CONFLICT = """
             {"status":409,"message":"Only pending orders can be confirmed","errors":{}}""";
@@ -47,6 +48,7 @@ class GatewayRoutingIT {
     static {
         MONOLITH.start();
         SALES.start();
+        PAYMENT.start();
     }
 
     private static int freePort() {
@@ -61,12 +63,14 @@ class GatewayRoutingIT {
     static void routeToTheFakeServices(DynamicPropertyRegistry registry) {
         registry.add("MONOLITH_URL", MONOLITH::baseUrl);
         registry.add("SALES_URL", SALES::baseUrl);
+        registry.add("PAYMENT_URL", PAYMENT::baseUrl);
     }
 
     @AfterAll
     static void stopTheFakeServices() {
         MONOLITH.stop();
         SALES.stop();
+        PAYMENT.stop();
     }
 
     @LocalServerPort
@@ -78,6 +82,7 @@ class GatewayRoutingIT {
     void resetTheFakeServices() {
         MONOLITH.resetAll();
         SALES.resetAll();
+        PAYMENT.resetAll();
     }
 
     private HttpResponse<String> send(HttpRequest.Builder request) throws IOException, InterruptedException {
@@ -108,13 +113,23 @@ class GatewayRoutingIT {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"/auth/login", "/users/1", "/products", "/products/1", "/cart",
-            "/orders", "/payments/orders/1"})
+    @ValueSource(strings = {"/auth/login", "/users/1", "/products", "/products/1", "/cart", "/orders"})
     void shouldRouteThePrefixesStillInTheMonolithToIt(String path) throws Exception {
         MONOLITH.stubFor(WireMock.any(urlEqualTo(path)).willReturn(aResponse().withStatus(200)));
 
         assertEquals(200, send(to(path).GET()).statusCode());
         SALES.verify(0, anyRequestedFor(anyUrl()));
+        PAYMENT.verify(0, anyRequestedFor(anyUrl()));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"/payments/1", "/payments/orders/1"})
+    void shouldRouteThePaymentsToThePaymentService(String path) throws Exception {
+        PAYMENT.stubFor(WireMock.any(urlEqualTo(path)).willReturn(aResponse().withStatus(200)));
+
+        assertEquals(200, send(to(path).header("Authorization", TOKEN).GET()).statusCode());
+        PAYMENT.verify(anyRequestedFor(urlEqualTo(path)).withHeader("Authorization", equalTo(TOKEN)));
+        MONOLITH.verify(0, anyRequestedFor(anyUrl()));
     }
 
     @ParameterizedTest
@@ -151,6 +166,7 @@ class GatewayRoutingIT {
         assertThat(response.body()).contains("\"status\":404");
         MONOLITH.verify(0, anyRequestedFor(anyUrl()));
         SALES.verify(0, anyRequestedFor(anyUrl()));
+        PAYMENT.verify(0, anyRequestedFor(anyUrl()));
     }
 
     @Test

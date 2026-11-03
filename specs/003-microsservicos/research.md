@@ -204,7 +204,12 @@ Resilience4j 2.3.0, Testcontainers 2.0.5. Em 2026-10-24: Gatling 3.16.0 e
   script operacional em `docker/mysql/migrations/` move as tabelas com
   `RENAME TABLE orderflow.x TO <schema>.x`, que é atômico e não copia dados. O
   script roda uma vez, como root, nos volumes que já têm dados; ambientes novos
-  recebem as tabelas pela `V1` do serviço. Não é uma migração do Flyway do
+  recebem as tabelas pela `V1` do serviço. Depois do script, o schema tem tabela
+  e ainda não tem histórico, e o Flyway recusa migrá-lo; por isso cada serviço
+  liga `baseline-on-migrate` com a linha de base na versão 0, abaixo da `V1`, que
+  roda sem efeito e fica registrada. O monólito mantém as migrações antigas das
+  tabelas movidas, porque o Flyway valida o histórico já aplicado; num ambiente
+  novo, elas criam a tabela antiga vazia. Não é uma migração do Flyway do
   monólito porque, nos testes, o usuário do monólito só tem permissão no próprio
   schema e não consegue criar nem renomear para outro. No Redis, um usuário de ACL por
   serviço, restrito ao prefixo das chaves (`refreshToken*` para `identity`,

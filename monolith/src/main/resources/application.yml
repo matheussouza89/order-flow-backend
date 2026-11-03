@@ -60,33 +60,6 @@ orderflow:
       refresh-expiration: ${JWT_REFRESH_EXPIRATION:7d}
   outbox:
     poll-interval: ${OUTBOX_POLL_INTERVAL:1000}
-  payment:
-    gateway:
-      url: ${PAYMENT_GATEWAY_URL:http://localhost:8090}
-      connect-timeout: 2s
-      read-timeout: 3s
-
-resilience4j:
-  retry:
-    instances:
-      paymentGateway:
-        max-attempts: 3
-        wait-duration: 500ms
-        enable-exponential-backoff: true
-        exponential-backoff-multiplier: 2
-        retry-exceptions:
-          - org.springframework.web.client.ResourceAccessException
-          - org.springframework.web.client.HttpServerErrorException
-  circuitbreaker:
-    instances:
-      paymentGateway:
-        sliding-window-type: COUNT_BASED
-        sliding-window-size: 10
-        minimum-number-of-calls: 5
-        failure-rate-threshold: 50
-        wait-duration-in-open-state: 30s
-        permitted-number-of-calls-in-half-open-state: 2
-        automatic-transition-from-open-to-half-open-enabled: true
 
 springdoc:
   paths-to-exclude:

@@ -15,7 +15,13 @@ spring:
             - id: monolith
               uri: ${MONOLITH_URL:http://monolith:8080}
               predicates:
-                - Path=/auth/**,/users/**,/products/**,/cart/**,/orders/**,/payments/**
+                - Path=/auth/**,/users/**,/products/**,/cart/**,/orders/**
+              filters:
+                - PreserveHostHeader
+            - id: payment
+              uri: ${PAYMENT_URL:http://payment:8080}
+              predicates:
+                - Path=/payments/**
               filters:
                 - PreserveHostHeader
             - id: sales
@@ -28,6 +34,13 @@ spring:
               uri: ${MONOLITH_URL:http://monolith:8080}
               predicates:
                 - Path=/v3/api-docs/monolith
+              filters:
+                - PreserveHostHeader
+                - SetPath=/v3/api-docs
+            - id: payment-docs
+              uri: ${PAYMENT_URL:http://payment:8080}
+              predicates:
+                - Path=/v3/api-docs/payment
               filters:
                 - PreserveHostHeader
                 - SetPath=/v3/api-docs
@@ -52,5 +65,7 @@ springdoc:
     urls:
       - name: monolith
         url: /v3/api-docs/monolith
+      - name: payment
+        url: /v3/api-docs/payment
       - name: sales
         url: /v3/api-docs/sales

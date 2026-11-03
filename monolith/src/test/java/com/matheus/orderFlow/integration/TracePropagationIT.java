@@ -4,6 +4,7 @@ import com.jayway.jsonpath.JsonPath;
 import com.matheus.orderFlow.contracts.order.OrderConfirmedEvent;
 import com.matheus.orderFlow.contracts.order.OrderFacts;
 import io.micrometer.tracing.Tracer;
+import lombok.extern.slf4j.Slf4j;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -100,12 +101,12 @@ class TracePropagationIT extends AbstractIntegrationTest {
 
         Awaitility.await()
                 .atMost(Duration.ofSeconds(15))
-                .until(() -> !linesWith(output, "Payment created", orderId).isEmpty());
+                .until(() -> !linesWith(output, "Confirmation consumed", orderId).isEmpty());
 
         assertThat(linesWith(output, "Order transitioned", orderId))
                 .isNotEmpty()
                 .allMatch(line -> line.contains(TRACE_ID));
-        assertThat(linesWith(output, "Payment created", orderId))
+        assertThat(linesWith(output, "Confirmation consumed", orderId))
                 .allMatch(line -> line.contains(TRACE_ID));
     }
 
@@ -129,6 +130,7 @@ class TracePropagationIT extends AbstractIntegrationTest {
         }
     }
 
+    @Slf4j
     static class ConfirmedTraces {
         private final Tracer tracer;
         private final Map<UUID, String> byOrder = new ConcurrentHashMap<>();
@@ -139,6 +141,7 @@ class TracePropagationIT extends AbstractIntegrationTest {
 
         @RabbitListener(queues = CAPTURE_QUEUE)
         void onConfirmed(OrderConfirmedEvent event) {
+            log.info("Confirmation consumed: orderId={}", event.orderId());
             byOrder.put(event.orderId(), tracer.currentSpan().context().traceId());
         }
     }

@@ -28,26 +28,32 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 class DocumentationIT {
     private static final WireMockServer MONOLITH = new WireMockServer(options().dynamicPort());
     private static final WireMockServer SALES = new WireMockServer(options().dynamicPort());
+    private static final WireMockServer PAYMENT = new WireMockServer(options().dynamicPort());
     private static final String MONOLITH_DOCS = """
             {"openapi":"3.1.0","info":{"title":"OrderFlow API"},"paths":{"/orders":{}}}""";
     private static final String SALES_DOCS = """
             {"openapi":"3.1.0","info":{"title":"OrderFlow Sales API"},"paths":{"/admin/sales/daily":{}}}""";
+    private static final String PAYMENT_DOCS = """
+            {"openapi":"3.1.0","info":{"title":"OrderFlow Payments API"},"paths":{"/payments/{id}":{}}}""";
 
     static {
         MONOLITH.start();
         SALES.start();
+        PAYMENT.start();
     }
 
     @DynamicPropertySource
     static void routeToTheFakeServices(DynamicPropertyRegistry registry) {
         registry.add("MONOLITH_URL", MONOLITH::baseUrl);
         registry.add("SALES_URL", SALES::baseUrl);
+        registry.add("PAYMENT_URL", PAYMENT::baseUrl);
     }
 
     @AfterAll
     static void stopTheFakeServices() {
         MONOLITH.stop();
         SALES.stop();
+        PAYMENT.stop();
     }
 
     @LocalServerPort
@@ -78,6 +84,7 @@ class DocumentationIT {
 
         assertThat(urls).containsExactlyInAnyOrder(
                 Map.of("name", "monolith", "url", "/v3/api-docs/monolith"),
+                Map.of("name", "payment", "url", "/v3/api-docs/payment"),
                 Map.of("name", "sales", "url", "/v3/api-docs/sales"));
     }
 
@@ -85,9 +92,11 @@ class DocumentationIT {
     void shouldFetchEachServiceDocumentThroughTheSingleEntry() throws Exception {
         serveDocs(MONOLITH, MONOLITH_DOCS);
         serveDocs(SALES, SALES_DOCS);
+        serveDocs(PAYMENT, PAYMENT_DOCS);
 
         assertEquals(MONOLITH_DOCS, fetch("/v3/api-docs/monolith").body());
         assertEquals(SALES_DOCS, fetch("/v3/api-docs/sales").body());
+        assertEquals(PAYMENT_DOCS, fetch("/v3/api-docs/payment").body());
     }
 
     private static void serveDocs(WireMockServer service, String document) {
