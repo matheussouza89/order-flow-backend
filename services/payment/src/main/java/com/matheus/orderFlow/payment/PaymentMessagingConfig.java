@@ -1,6 +1,7 @@
 package com.matheus.orderFlow.payment;
 
 import com.matheus.orderFlow.contracts.order.OrderFacts;
+import com.matheus.orderFlow.shared.messaging.FactTypes;
 import org.springframework.amqp.core.Binding;
 import org.springframework.amqp.core.BindingBuilder;
 import org.springframework.amqp.core.Queue;
@@ -13,6 +14,11 @@ import org.springframework.context.annotation.Configuration;
 class PaymentMessagingConfig {
 
     static final String ORDER_CONFIRMED_QUEUE = "order.confirmed.payment";
+
+    @Bean
+    FactTypes factTypes() {
+        return new FactTypes(OrderFacts.TYPES, OrderFacts.LEGACY_TYPES);
+    }
 
     @Bean
     Queue orderConfirmedPaymentQueue() {

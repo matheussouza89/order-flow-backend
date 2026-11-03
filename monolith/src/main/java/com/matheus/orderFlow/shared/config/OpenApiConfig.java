@@ -25,8 +25,8 @@ import org.springframework.context.annotation.Configuration;
                 description = """
                         ## Purpose
                         REST API for managing a product catalog and customer orders, covering
-                        accounts, the shopping cart, order creation, the order lifecycle up to
-                        delivery, and the charge registered for each confirmed order.
+                        accounts, the shopping cart, order creation and the order lifecycle up to
+                        delivery.
 
                         ## Context
                         An order is a historical document, not a live view of the catalog. When
@@ -89,22 +89,9 @@ import org.springframework.context.annotation.Configuration;
                         what prevents the operation is the current state of the resource.
 
                         ## Payments
-                        Confirming an order registers a charge for it. The payment is created
-                        asynchronously — the confirmation responds immediately and the charge
-                        appears shortly after — so a query right after confirming may still
-                        return 404.
-
-                        There is no endpoint to create, approve or decline a payment. The
-                        amount comes from the order and the outcome comes from the payment
-                        gateway, so neither can be supplied by the caller. A payment starts as
-                        PENDING and settles as:
-
-                        - `APPROVED` — the gateway accepted the charge
-                        - `DECLINED` — the gateway refused it; retrying as-is will not help
-                        - `FAILED` — a technical failure, such as a timeout; may be retried
-
-                        Confirming the same order twice never produces two charges: the
-                        idempotency key is derived from the order.
+                        Confirming an order registers a charge for it. The payments under
+                        `/payments` are served by their own service and documented in its entry
+                        on this page.
 
                         ## Known flows
                         1. The client registers with `POST /auth/register` and signs in with
@@ -167,10 +154,10 @@ import org.springframework.context.annotation.Configuration;
                         additionally requires the `ADMIN` role.
 
                         ## Who owns what
-                        Orders, carts and payments belong to the user who created them. A caller
-                        only ever reaches their own; an administrator reaches all of them.
+                        Orders and carts belong to the user who created them. A caller only ever
+                        reaches their own; an administrator reaches all of them.
 
-                        Asking for someone else's order or payment answers **404**, not 403: a
+                        Asking for someone else's order answers **404**, not 403: a
                         403 would confirm that the identifier exists, which is enough to count
                         the store's orders by trying identifiers.
 

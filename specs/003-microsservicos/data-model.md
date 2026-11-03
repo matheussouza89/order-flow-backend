@@ -56,7 +56,9 @@ Na etapa de extração de cada serviço, um script operacional em
 <schema>.<tabela>`, uma vez e como root, nos volumes que já têm dados. A operação
 é atômica e não copia linhas (FR-012). O Flyway do serviço novo começa com
 `CREATE TABLE IF NOT EXISTS`, que cria as tabelas num banco vazio, como nos testes
-e em ambientes novos, e não faz nada quando elas já chegaram pelo script.
+e em ambientes novos, e não faz nada quando elas já chegaram pelo script. Para
+aceitar o schema que já tem tabela sem histórico, o serviço usa
+`baseline-on-migrate` com a linha de base na versão 0 ([research.md](research.md), R8).
 
 | Etapa | Tabelas movidas | Schema |
 |---|---|---|

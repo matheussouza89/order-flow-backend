@@ -23,6 +23,7 @@
 		<module>gateway</module>
 		<module>monolith</module>
 		<module>services/sales</module>
+		<module>services/payment</module>
 		<module>load</module>
 	</modules>
 

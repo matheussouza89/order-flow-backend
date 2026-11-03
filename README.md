@@ -12,13 +12,14 @@ resiliência, com autenticação por JWT, rotas protegidas por papel e recursos
 vinculados ao usuário do token (ver [Roadmap](#roadmap)).
 
 Está em andamento a separação em microsserviços, especificada em
-[specs/003-microsservicos](specs/003-microsservicos/spec.md). Duas etapas estão
+[specs/003-microsservicos](specs/003-microsservicos/spec.md). Três etapas estão
 prontas. Na primeira, o cliente passou a entrar por um gateway, a credencial
 ficou verificável por qualquer serviço sem que ele consiga emiti-la, e o rastro
 de uma requisição atravessa serviços e mensagens. Na segunda, os relatórios de
 vendas viraram o primeiro serviço próprio, alimentado só pelos fatos dos
-pedidos. O resto ainda roda num monólito atrás do gateway, que perde uma
-capacidade por etapa.
+pedidos. Na terceira, os pagamentos saíram com os próprios dados, num schema que
+só o serviço alcança. O resto ainda roda num monólito atrás do gateway, que perde
+uma capacidade por etapa.
 
 ---
 
@@ -47,16 +48,16 @@ capacidade por etapa.
 
 **Pré-requisito:** Docker.
 
-Suba o projeto inteiro — gateway, monólito, serviço de vendas, MySQL, MongoDB,
-Redis, RabbitMQ, WireMock e Zipkin:
+Suba o projeto inteiro — gateway, monólito, serviços de vendas e de pagamentos,
+MySQL, MongoDB, Redis, RabbitMQ, WireMock e Zipkin:
 
 ```bash
 docker compose up --build
 ```
 
-Só o gateway publica a porta 8080. O monólito e o serviço de vendas ficam na
-rede interna, e uma chamada direta a eles sem credencial é recusada como
-qualquer outra.
+Só o gateway publica a porta 8080. O monólito e os serviços ficam na rede
+interna, e uma chamada direta a eles sem credencial é recusada como qualquer
+outra.
 
 Um único Dockerfile constrói qualquer módulo, escolhido pelo argumento `MODULE`.
 O primeiro estágio compila com Maven só o módulo e as bibliotecas de que ele
@@ -75,13 +76,28 @@ serve para qualquer ambiente.
 O administrador é criado automaticamente quando não existe nenhum, então subir
 o projeto já dá acesso às rotas de `ADMIN`.
 
-Cada serviço terá schema e usuário próprios no MySQL, criados por
+Cada serviço tem schema e usuário próprios no MySQL, criados por
 `docker/mysql/init/01-schemas.sql` na primeira subida do volume. Um volume que
 já existia antes da separação não roda esse script de novo; aplique uma vez:
 
 ```bash
 docker compose exec -T mysql mysql -uroot -proot < docker/mysql/init/01-schemas.sql
 ```
+
+Num volume com pagamentos de antes da etapa 3, mova a tabela para o schema do
+serviço **antes da primeira subida do `payment`**:
+
+```bash
+docker compose up -d mysql
+```
+
+```bash
+docker compose exec -T mysql mysql -uroot -proot < docker/mysql/migrations/us3-payments.sql
+```
+
+Se o `payment` subir antes, ele cria a tabela vazia no próprio schema e o script
+é recusado, sem mexer em nenhuma linha: com a `payment.payments` ainda vazia,
+apague-a e rode o script de novo. Volume novo não precisa de nada.
 
 Para desenvolver com o monólito fora do container (Java 21 necessário), suba
 só a infraestrutura e rode o módulo pelo Maven. Ele atende direto na porta 8080
@@ -119,7 +135,7 @@ Roda os **263 testes unitários** em poucos segundos, sem Docker.
 ./mvnw verify
 ```
 
-Roda os unitários **mais os 178 de integração**, que sobem MySQL, MongoDB, Redis e
+Roda os unitários **mais os 183 de integração**, que sobem MySQL, MongoDB, Redis e
 RabbitMQ reais via Testcontainers, e um WireMock fazendo as vezes do gateway de
 pagamento, do serviço atrás da entrada única ou da exportação de pedidos.
 
@@ -127,26 +143,28 @@ pagamento, do serviço atrás da entrada única ou da exportação de pedidos.
 ./mvnw verify -Pe2e -pl e2e -am
 ```
 
-Roda os **16 testes ponta a ponta**, que constroem as imagens, sobem o Compose
+Roda os **22 testes ponta a ponta**, que constroem as imagens, sobem o Compose
 inteiro pelo Testcontainers e falam com o sistema pela porta 8080, como um
 cliente. São eles que provam o que só aparece com os serviços juntos: todas as
 rotas respondendo pela entrada única, a chamada direta sem credencial recusada,
-a documentação única cobrindo todas as rotas e os pedidos confirmados com o
-serviço de vendas parado. Usam as mesmas portas do Compose,
-então a pilha de desenvolvimento precisa estar parada.
+a documentação única cobrindo todas as rotas, os pedidos confirmados com os
+serviços de vendas e de pagamentos parados, a cobrança feita uma vez só quando
+o serviço volta e cada usuário do MySQL sem acesso ao schema dos outros. Usam as
+mesmas portas do Compose, então a pilha de desenvolvimento precisa estar parada.
 
 | Módulo | Unitários | Integração | Ponta a ponta |
 |---|---|---|---|
-| `monolith` | 214 | 131 | — |
+| `monolith` | 184 | 125 | — |
+| `payment` | 30 | 10 | — |
 | `sales` | 5 | 26 | — |
-| `gateway` | 2 | 21 | — |
+| `gateway` | 2 | 22 | — |
 | `platform-outbox` | 16 | — | — |
 | `contracts` | 7 | — | — |
 | `platform-web` | 6 | — | — |
 | `platform-security` | 6 | — | — |
 | `platform-messaging` | 5 | — | — |
 | `platform-test` | 2 | — | — |
-| `e2e` | — | — | 16 |
+| `e2e` | — | — | 22 |
 
 A separação é feita por convenção de nome: o Surefire pega só `*Test.java`, o
 Failsafe pega `*IT.java`. O teste que sobe o contexto inteiro se chama
@@ -211,7 +229,7 @@ com.matheus.orderFlow/
 ├── product/          Product, ProductService, ProductRepository, ProductController, DTOs
 ├── cart/             Cart, CartService, CartRepository, CartController, DTOs
 ├── order/            Order, OrderItem, OrderStatus, OrderService, OrderController, DTOs
-├── payment/          Payment, PaymentService, PaymentProcessor, gateway e listener, DTOs
+├── payment/          cobrança, hoje no serviço próprio (services/payment)
 ├── sales/            relatórios de vendas, hoje no serviço próprio (services/sales)
 └── shared/
     ├── config/       configuração da aplicação
@@ -1023,6 +1041,37 @@ customizador global, o token do usuário iria também para o gateway de pagament
 que é de terceiros. Se o monólito não responde, a reconstrução devolve 503; se
 recusa, o mesmo status e o mesmo corpo chegam ao administrador.
 
+### Pagamentos, o segundo serviço
+
+Os pagamentos saíram em seguida pelo mesmo motivo dos relatórios: o pacote só
+reagia ao fato `order.confirmed` e não chamava o resto do monólito. O serviço
+`payment` consome a mesma fila, com o mesmo gateway, a mesma política de
+resiliência e a mesma chave de idempotência. Com ele parado, a confirmação
+continua respondendo, o fato espera na fila e a cobrança acontece quando o
+serviço volta. O teste ponta a ponta conta as chamadas que chegam ao WireMock
+para provar que ela acontece uma vez só.
+
+O que mudou foi o dado. A tabela `payments` passou do schema `orderflow` para o
+`payment`, que só o usuário `payment` do MySQL alcança, e o teste ponta a ponta
+confirma que cada usuário recebe acesso negado no schema do outro. A mudança é um
+`RENAME TABLE`, que é atômico e não copia linhas, então nada se perde nem se
+duplica. Ele fica num script em `docker/mysql/migrations/`, e não numa migração
+do monólito, porque o usuário do monólito só tem permissão no próprio schema e
+não consegue renomear para outro.
+
+O Flyway do serviço começa com `CREATE TABLE IF NOT EXISTS`, que cria a tabela num
+banco vazio e não faz nada quando ela chegou pelo script. Só isso não bastava: o
+Flyway se recusa a migrar um schema que já tem tabela e ainda não tem histórico.
+O serviço liga `baseline-on-migrate` com a linha de base na versão 0, abaixo da
+`V1`, para que ela ainda rode e fique registrada. Um teste de integração prepara
+o MySQL com o script de schemas do Compose, preenche a tabela antiga, roda o
+script de movimentação como root e sobe o Flyway e o Hibernate do serviço com o
+usuário `payment`.
+
+O monólito mantém as migrações antigas de `payments`, porque o Flyway valida o
+histórico já aplicado. Num ambiente novo, ele ainda cria `orderflow.payments`,
+vazia e sem uso.
+
 ## Endpoints
 
 **Contas**
@@ -1158,11 +1207,13 @@ mesma versão não contam.
 - [x] Fila de espera e DLQ para status que chega antes da confirmação
 - [x] Reconstrução da projeção pela exportação do serviço de pedidos
 - [x] Relatórios administrativos de vendas por dia e por produto
-- [x] 457 testes, separados por velocidade (unitários, integração e ponta a ponta)
+- [x] 468 testes, separados por velocidade (unitários, integração e ponta a ponta)
 - [x] Separação em serviços, etapa 1: entrada única, credencial RS256 com JWKS,
   fatos com tipo versionado, rastreamento com Zipkin e linha de base de carga
 - [x] Separação em serviços, etapa 2: relatórios de vendas como serviço próprio,
   com reconstrução pela exportação dos pedidos
+- [x] Separação em serviços, etapa 3: pagamentos como serviço próprio, com os
+  dados movidos de schema por `RENAME TABLE`
 - [x] Pipeline de CI rodando `mvn verify` a cada push
 - [x] Imagem da aplicação e stack completa em Docker, com conexões por variável de ambiente
 - [x] Documentação OpenAPI
