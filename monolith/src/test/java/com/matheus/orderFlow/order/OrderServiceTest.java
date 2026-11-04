@@ -1,14 +1,14 @@
 package com.matheus.orderFlow.order;
 
+import com.matheus.orderFlow.catalog.CatalogProduct;
+import com.matheus.orderFlow.catalog.CatalogService;
 import com.matheus.orderFlow.contracts.order.OrderCancelledEvent;
 import com.matheus.orderFlow.contracts.order.OrderConfirmedEvent;
 import com.matheus.orderFlow.contracts.order.OrderDeliveredEvent;
 import com.matheus.orderFlow.contracts.order.OrderShippedEvent;
-import com.matheus.orderFlow.product.ProductResponse;
 import com.matheus.orderFlow.shared.exception.DomainValidationException;
 import com.matheus.orderFlow.shared.exception.InvalidStatusTransitionException;
 import com.matheus.orderFlow.shared.exception.NotFoundException;
-import com.matheus.orderFlow.product.ProductService;
 import com.matheus.orderFlow.shared.security.AuthenticatedUser;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.PageRequest;
@@ -25,7 +25,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
 
 import java.math.BigDecimal;
-import java.time.Instant;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Optional;
@@ -43,7 +42,7 @@ public class OrderServiceTest {
     private OrderRepository orderRepository;
 
     @Mock
-    private ProductService productService;
+    private CatalogService catalogService;
 
     @Mock
     private ApplicationEventPublisher events;
@@ -116,11 +115,8 @@ public class OrderServiceTest {
         verify(orderRepository, never()).findByUserId(any(), any());
     }
 
-    private ProductResponse catalogProduct(UUID id, String name, String price) {
-        return new ProductResponse(
-                id, name, "Descricao", new BigDecimal(price),
-                Instant.now(), Instant.now()
-        );
+    private CatalogProduct catalogProduct(UUID id, String name, String price) {
+        return new CatalogProduct(id, name, new BigDecimal(price));
     }
 
     private void returnSavedOrder() {
@@ -180,7 +176,7 @@ public class OrderServiceTest {
     void shouldBuildItemSnapshotFromCatalog() {
         UUID productId = UUID.randomUUID();
 
-        when(productService.getProduct(productId))
+        when(catalogService.getProduct(productId))
                 .thenReturn(catalogProduct(productId, "Teclado", "100.00"));
         returnSavedOrder();
 
@@ -200,7 +196,7 @@ public class OrderServiceTest {
         assertEquals(0, new BigDecimal("200.00").compareTo(result.total()));
         assertEquals(OrderStatus.PENDING, result.status());
 
-        verify(productService).getProduct(productId);
+        verify(catalogService).getProduct(productId);
     }
 
     @Test
@@ -208,9 +204,9 @@ public class OrderServiceTest {
         UUID keyboardId = UUID.randomUUID();
         UUID mouseId = UUID.randomUUID();
 
-        when(productService.getProduct(keyboardId))
+        when(catalogService.getProduct(keyboardId))
                 .thenReturn(catalogProduct(keyboardId, "Teclado", "100.00"));
-        when(productService.getProduct(mouseId))
+        when(catalogService.getProduct(mouseId))
                 .thenReturn(catalogProduct(mouseId, "Mouse", "50.00"));
         returnSavedOrder();
 
@@ -229,7 +225,7 @@ public class OrderServiceTest {
     void shouldThrowNotFoundWhenProductDoesNotExist() {
         UUID productId = UUID.randomUUID();
 
-        when(productService.getProduct(productId))
+        when(catalogService.getProduct(productId))
                 .thenThrow(new NotFoundException(productId));
 
         OrderDto dto = new OrderDto(List.of(new OrderItemDto(productId, 1)));
@@ -261,7 +257,7 @@ public class OrderServiceTest {
     void shouldRejectItemWithNullQuantity() {
         UUID productId = UUID.randomUUID();
 
-        when(productService.getProduct(productId))
+        when(catalogService.getProduct(productId))
                 .thenReturn(catalogProduct(productId, "Teclado", "100.00"));
 
         OrderDto dto = new OrderDto(List.of(new OrderItemDto(productId, null)));
@@ -275,7 +271,7 @@ public class OrderServiceTest {
     void shouldRejectItemWithZeroQuantity() {
         UUID productId = UUID.randomUUID();
 
-        when(productService.getProduct(productId))
+        when(catalogService.getProduct(productId))
                 .thenReturn(catalogProduct(productId, "Teclado", "100.00"));
 
         OrderDto dto = new OrderDto(List.of(new OrderItemDto(productId, 0)));

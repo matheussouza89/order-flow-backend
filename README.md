@@ -12,14 +12,15 @@ resiliência, com autenticação por JWT, rotas protegidas por papel e recursos
 vinculados ao usuário do token (ver [Roadmap](#roadmap)).
 
 Está em andamento a separação em microsserviços, especificada em
-[specs/003-microsservicos](specs/003-microsservicos/spec.md). Três etapas estão
+[specs/003-microsservicos](specs/003-microsservicos/spec.md). Quatro etapas estão
 prontas. Na primeira, o cliente passou a entrar por um gateway, a credencial
 ficou verificável por qualquer serviço sem que ele consiga emiti-la, e o rastro
 de uma requisição atravessa serviços e mensagens. Na segunda, os relatórios de
 vendas viraram o primeiro serviço próprio, alimentado só pelos fatos dos
 pedidos. Na terceira, os pagamentos saíram com os próprios dados, num schema que
-só o serviço alcança. O resto ainda roda num monólito atrás do gateway, que perde
-uma capacidade por etapa.
+só o serviço alcança. Na quarta, o catálogo virou serviço, e o carrinho e o
+pedido passaram a consultá-lo pela rede, com prazo e circuit breaker. O resto
+ainda roda num monólito atrás do gateway, que perde uma capacidade por etapa.
 
 ---
 
@@ -48,8 +49,8 @@ uma capacidade por etapa.
 
 **Pré-requisito:** Docker.
 
-Suba o projeto inteiro — gateway, monólito, serviços de vendas e de pagamentos,
-MySQL, MongoDB, Redis, RabbitMQ, WireMock e Zipkin:
+Suba o projeto inteiro — gateway, monólito, serviços de catálogo, pagamentos e
+vendas, MySQL, MongoDB, Redis, RabbitMQ, WireMock e Zipkin:
 
 ```bash
 docker compose up --build
@@ -84,8 +85,10 @@ já existia antes da separação não roda esse script de novo; aplique uma vez:
 docker compose exec -T mysql mysql -uroot -proot < docker/mysql/init/01-schemas.sql
 ```
 
-Num volume com pagamentos de antes da etapa 3, mova a tabela para o schema do
-serviço **antes da primeira subida do `payment`**:
+Num volume com dados de antes da separação, cada etapa que tira uma tabela do
+monólito tem um script em `docker/mysql/migrations/`, que roda **antes da
+primeira subida do serviço dono**: `us3-payments.sql` antes do `payment` e
+`us4-products.sql` antes do `catalog`.
 
 ```bash
 docker compose up -d mysql
@@ -95,20 +98,30 @@ docker compose up -d mysql
 docker compose exec -T mysql mysql -uroot -proot < docker/mysql/migrations/us3-payments.sql
 ```
 
-Se o `payment` subir antes, ele cria a tabela vazia no próprio schema e o script
-é recusado, sem mexer em nenhuma linha: com a `payment.payments` ainda vazia,
-apague-a e rode o script de novo. Volume novo não precisa de nada.
+```bash
+docker compose exec -T mysql mysql -uroot -proot < docker/mysql/migrations/us4-products.sql
+```
+
+Se o serviço subir antes, ele cria a tabela vazia no próprio schema e o script é
+recusado, sem mexer em nenhuma linha: com a tabela nova ainda vazia, apague-a e
+rode o script de novo. Volume novo não precisa de nada.
 
 Para desenvolver com o monólito fora do container (Java 21 necessário), suba
-só a infraestrutura e rode o módulo pelo Maven. Ele atende direto na porta 8080
-e não precisa do MongoDB, que agora é só do serviço de vendas:
+só a infraestrutura e rode os módulos pelo Maven. O monólito atende direto na
+porta 8080 e não precisa do MongoDB, que agora é só do serviço de vendas. O
+carrinho e o pedido consultam o catálogo, então ele sobe junto, na porta 8081,
+validando o token pelas chaves do monólito:
 
 ```bash
 docker compose up -d mysql redis rabbitmq zipkin
 ```
 
 ```bash
-./mvnw -pl monolith spring-boot:run
+CATALOG_URL=http://localhost:8081 ./mvnw -pl monolith spring-boot:run
+```
+
+```bash
+JWK_SET_URI=http://localhost:8080/.well-known/jwks.json ./mvnw -pl services/catalog spring-boot:run -Dspring-boot.run.arguments=--server.port=8081
 ```
 
 | Recurso | URL |
@@ -135,26 +148,29 @@ Roda os **263 testes unitários** em poucos segundos, sem Docker.
 ./mvnw verify
 ```
 
-Roda os unitários **mais os 183 de integração**, que sobem MySQL, MongoDB, Redis e
+Roda os unitários **mais os 193 de integração**, que sobem MySQL, MongoDB, Redis e
 RabbitMQ reais via Testcontainers, e um WireMock fazendo as vezes do gateway de
-pagamento, do serviço atrás da entrada única ou da exportação de pedidos.
+pagamento, do catálogo, do serviço atrás da entrada única ou da exportação de
+pedidos.
 
 ```bash
 ./mvnw verify -Pe2e -pl e2e -am
 ```
 
-Roda os **22 testes ponta a ponta**, que constroem as imagens, sobem o Compose
+Roda os **28 testes ponta a ponta**, que constroem as imagens, sobem o Compose
 inteiro pelo Testcontainers e falam com o sistema pela porta 8080, como um
 cliente. São eles que provam o que só aparece com os serviços juntos: todas as
 rotas respondendo pela entrada única, a chamada direta sem credencial recusada,
 a documentação única cobrindo todas as rotas, os pedidos confirmados com os
 serviços de vendas e de pagamentos parados, a cobrança feita uma vez só quando
-o serviço volta e cada usuário do MySQL sem acesso ao schema dos outros. Usam as
+o serviço volta, a finalização recusada no prazo com o catálogo parado e cada
+usuário do MySQL sem acesso ao schema dos outros. Usam as
 mesmas portas do Compose, então a pilha de desenvolvimento precisa estar parada.
 
 | Módulo | Unitários | Integração | Ponta a ponta |
 |---|---|---|---|
-| `monolith` | 184 | 125 | — |
+| `monolith` | 141 | 116 | — |
+| `catalog` | 43 | 19 | — |
 | `payment` | 30 | 10 | — |
 | `sales` | 5 | 26 | — |
 | `gateway` | 2 | 22 | — |
@@ -164,7 +180,7 @@ mesmas portas do Compose, então a pilha de desenvolvimento precisa estar parada
 | `platform-security` | 6 | — | — |
 | `platform-messaging` | 5 | — | — |
 | `platform-test` | 2 | — | — |
-| `e2e` | — | — | 22 |
+| `e2e` | — | — | 28 |
 
 A separação é feita por convenção de nome: o Surefire pega só `*Test.java`, o
 Failsafe pega `*IT.java`. O teste que sobe o contexto inteiro se chama
@@ -226,7 +242,8 @@ roda com `-Xmx256m`.
 ```
 com.matheus.orderFlow/
 ├── user/             User, UserService, UserRepository, AuthController, UserController, DTOs
-├── product/          Product, ProductService, ProductRepository, ProductController, DTOs
+├── product/          catálogo, hoje no serviço próprio (services/catalog)
+├── catalog/          cliente do catálogo usado pelo carrinho e pelo pedido
 ├── cart/             Cart, CartService, CartRepository, CartController, DTOs
 ├── order/            Order, OrderItem, OrderStatus, OrderService, OrderController, DTOs
 ├── payment/          cobrança, hoje no serviço próprio (services/payment)
@@ -1072,6 +1089,40 @@ O monólito mantém as migrações antigas de `payments`, porque o Flyway valida
 histórico já aplicado. Num ambiente novo, ele ainda cria `orderflow.payments`,
 vazia e sem uso.
 
+### Catálogo, a primeira chamada síncrona
+
+Até aqui os serviços separados só reagiam a fatos. O catálogo é diferente: a
+finalização da compra precisa do nome e do preço do produto na hora. O carrinho
+e o pedido, que continuam no monólito, passaram a consultá-lo pela rede, em
+`GET /products/{id}`. Os produtos mudaram de schema pelo mesmo `RENAME TABLE` dos
+pagamentos.
+
+A chamada usa uma interface `@HttpExchange` num grupo do Boot, como a
+reconstrução dos relatórios, com a credencial de quem chamou e o rastro
+propagados. Ela tem prazo de 1,5 segundo para conectar e 1,5 segundo para
+responder, e um circuit breaker: depois de cinco chamadas, se metade falhou, o
+monólito para de tentar por 10 segundos e responde 503 na hora. O motivo é o
+tempo do cliente: com o catálogo fora, cada finalização gastaria o prazo
+inteiro, e a entrada única corta em 4,5 segundos.
+
+Nem toda resposta ruim é falha do catálogo. Um 404 é o produto que saiu do
+catálogo, e a finalização continua respondendo o mesmo 409 de antes, com a lista
+dos indisponíveis; um 401 é a credencial que expirou no meio da compra. Essas
+respostas não contam no circuit breaker e não passam pelo fallback, declarado só
+para conexão que falha, tempo esgotado, 5xx e circuito aberto. Um fallback
+genérico transformaria um 409 em 503.
+
+Com o catálogo fora, o carrinho fica como estava, e consultar os próprios pedidos
+continua funcionando, porque o pedido guarda a cópia do nome e do preço. A
+criação do pedido deixou de abrir transação antes de consultar o catálogo:
+segurar uma conexão do banco enquanto se espera outro serviço esgota o pool sob
+carga, e a gravação já é atômica no `save` do repositório.
+
+O 503 do catálogo vem do monólito, com a mensagem `Service unavailable: catalog`;
+o da entrada única diz só `Service unavailable`. O teste ponta a ponta para o
+catálogo e confere a mensagem, o prazo de 5 segundos e o carrinho intacto depois
+que ele volta.
+
 ## Endpoints
 
 **Contas**
@@ -1207,13 +1258,15 @@ mesma versão não contam.
 - [x] Fila de espera e DLQ para status que chega antes da confirmação
 - [x] Reconstrução da projeção pela exportação do serviço de pedidos
 - [x] Relatórios administrativos de vendas por dia e por produto
-- [x] 468 testes, separados por velocidade (unitários, integração e ponta a ponta)
+- [x] 484 testes, separados por velocidade (unitários, integração e ponta a ponta)
 - [x] Separação em serviços, etapa 1: entrada única, credencial RS256 com JWKS,
   fatos com tipo versionado, rastreamento com Zipkin e linha de base de carga
 - [x] Separação em serviços, etapa 2: relatórios de vendas como serviço próprio,
   com reconstrução pela exportação dos pedidos
 - [x] Separação em serviços, etapa 3: pagamentos como serviço próprio, com os
   dados movidos de schema por `RENAME TABLE`
+- [x] Separação em serviços, etapa 4: catálogo como serviço próprio, consultado
+  pela rede com prazo e circuit breaker
 - [x] Pipeline de CI rodando `mvn verify` a cada push
 - [x] Imagem da aplicação e stack completa em Docker, com conexões por variável de ambiente
 - [x] Documentação OpenAPI

@@ -24,9 +24,8 @@ import org.springframework.context.annotation.Configuration;
                 contact = @Contact(name = "Matheus Souza"),
                 description = """
                         ## Purpose
-                        REST API for managing a product catalog and customer orders, covering
-                        accounts, the shopping cart, order creation and the order lifecycle up to
-                        delivery.
+                        REST API for customer orders, covering accounts, the shopping cart, order
+                        creation and the order lifecycle up to delivery.
 
                         ## Context
                         An order is a historical document, not a live view of the catalog. When
@@ -40,6 +39,13 @@ import org.springframework.context.annotation.Configuration;
                         subtotal, total and status are derived by the domain — there is no way
                         to submit an order whose total disagrees with its items, or one that is
                         already delivered.
+
+                        ## Catalog
+                        The products under `/products` are served by their own service and
+                        documented in its entry on this page. The cart and the order read name
+                        and price from it while the request runs. If the catalog does not answer
+                        within 1.5 seconds, the request responds **503** and changes nothing: the
+                        cart stays as it was, and listing your own orders keeps working.
 
                         ## Accounts
                         `POST /auth/register` creates an account and returns **201** with the
@@ -112,11 +118,10 @@ import org.springframework.context.annotation.Configuration;
                            pair without asking for the password again.
 
                         ## Pagination
-                        `GET /products` and `GET /orders` return a page rather than the whole
-                        table, with `page`, `size`, `totalElements` and `totalPages` alongside
-                        the `content`.
+                        `GET /orders` returns a page rather than the whole table, with `page`,
+                        `size`, `totalElements` and `totalPages` alongside the `content`.
 
-                        They accept `page`, `size` and `sort` (as `field,asc` or `field,desc`).
+                        It accepts `page`, `size` and `sort` (as `field,asc` or `field,desc`).
                         The default is 20 items per page, newest first; `size` is capped at 100,
                         and a larger value is reduced rather than rejected.
 
@@ -149,9 +154,8 @@ import org.springframework.context.annotation.Configuration;
                         does not disconnect the others. The access token already issued stays
                         valid until it expires.
 
-                        Browsing the catalog (`GET /products`), registering, logging in and
-                        refreshing need no token. Everything else does. Changing the catalog
-                        additionally requires the `ADMIN` role.
+                        Registering, logging in and refreshing need no token. Everything else
+                        does.
 
                         ## Who owns what
                         Orders and carts belong to the user who created them. A caller only ever

@@ -1,6 +1,6 @@
 package com.matheus.orderFlow.cart;
 
-import com.matheus.orderFlow.product.ProductResponse;
+import com.matheus.orderFlow.catalog.CatalogProduct;
 
 import java.math.BigDecimal;
 import java.util.UUID;
@@ -12,7 +12,7 @@ public record CartItemResponse(
         BigDecimal price,
         BigDecimal totalPrice
 ) {
-    static CartItemResponse of(ProductResponse product, int quantity) {
+    static CartItemResponse of(CatalogProduct product, int quantity) {
         return new CartItemResponse(
                 product.id(),
                 product.name(),

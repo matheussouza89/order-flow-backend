@@ -32,6 +32,7 @@ public abstract class AbstractE2E {
             .withExposedService("monolith", HTTP_PORT, healthy())
             .withExposedService("sales", HTTP_PORT, healthy())
             .withExposedService("payment", HTTP_PORT, healthy())
+            .withExposedService("catalog", HTTP_PORT, healthy())
             .withExposedService("wiremock", HTTP_PORT);
 
     private static final HttpClient HTTP = HttpClient.newHttpClient();

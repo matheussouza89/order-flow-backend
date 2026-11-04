@@ -24,6 +24,7 @@
 		<module>monolith</module>
 		<module>services/sales</module>
 		<module>services/payment</module>
+		<module>services/catalog</module>
 		<module>load</module>
 	</modules>
 

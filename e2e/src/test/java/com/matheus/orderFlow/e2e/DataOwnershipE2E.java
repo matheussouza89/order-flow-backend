@@ -12,7 +12,9 @@ class DataOwnershipE2E extends AbstractE2E {
     @ParameterizedTest(name = "{0} reading {1}")
     @CsvSource({
             "payment, orderflow.orders",
-            "orderflow, payment.payments"
+            "orderflow, payment.payments",
+            "catalog, orderflow.orders",
+            "orderflow, catalog.products"
     })
     void shouldDenyEachServiceTheTablesOfTheOthers(String user, String table) {
         Container.ExecResult result = runIn("mysql", "mysql", "-u" + user, "-p" + user,

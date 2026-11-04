@@ -23,28 +23,12 @@ class OutboxIT extends AbstractIntegrationTest {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
-    private String createProduct() throws Exception {
-        String response = mockMvc.perform(post("/products")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {
-                                    "name": "Teclado",
-                                    "description": "Mecanico",
-                                    "price": 100.00
-                                }
-                                """))
-                .andExpect(status().isCreated())
-                .andReturn().getResponse().getContentAsString();
-
-        return JsonPath.read(response, "$.id");
-    }
-
     private String createOrder() throws Exception {
         String response = mockMvc.perform(post("/orders")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 { "items": [ { "productId": "%s", "quantity": 1 } ] }
-                                """.formatted(createProduct())))
+                                """.formatted(catalogProduct("Teclado", "100.00"))))
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
 

@@ -18,24 +18,6 @@ class CartIT extends AbstractIntegrationTest {
     @Autowired
     private MockMvc mockMvc;
 
-    private String createProduct(String name, String price) throws Exception {
-        String response = mockMvc.perform(post("/products")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {
-                                    "name": "%s",
-                                    "description": "Descricao",
-                                    "price": %s
-                                }
-                                """.formatted(name, price)))
-                .andExpect(status().isCreated())
-                .andReturn()
-                .getResponse()
-                .getContentAsString();
-
-        return JsonPath.read(response, "$.id");
-    }
-
     private void addItem(String productId, int quantity) throws Exception {
         mockMvc.perform(post("/cart/items")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -47,7 +29,7 @@ class CartIT extends AbstractIntegrationTest {
 
     @Test
     void shouldCreateCartOnFirstItem() throws Exception {
-        String productId = createProduct("Teclado", "100.00");
+        String productId = catalogProduct("Teclado", "100.00");
 
         mockMvc.perform(get("/cart"))
                 .andExpect(status().isNotFound());
@@ -65,22 +47,13 @@ class CartIT extends AbstractIntegrationTest {
 
     @Test
     void shouldReflectTheCurrentCatalogPrice() throws Exception {
-        String productId = createProduct("Monitor", "800.00");
+        String productId = catalogProduct("Monitor", "800.00");
         addItem(productId, 1);
 
         mockMvc.perform(get("/cart"))
                 .andExpect(jsonPath("$.total").value(800.00));
 
-        mockMvc.perform(put("/products/{id}", productId)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {
-                                    "name": "Monitor",
-                                    "description": "Descricao",
-                                    "price": 1200.00
-                                }
-                                """))
-                .andExpect(status().isOk());
+        putInCatalog(productId, "Monitor", "1200.00");
 
         mockMvc.perform(get("/cart"))
                 .andExpect(jsonPath("$.items[0].price").value(1200.00))
@@ -89,7 +62,7 @@ class CartIT extends AbstractIntegrationTest {
 
     @Test
     void shouldSumQuantityWhenAddingTheSameProductTwice() throws Exception {
-        String productId = createProduct("Mouse", "50.00");
+        String productId = catalogProduct("Mouse", "50.00");
 
         addItem(productId, 2);
         addItem(productId, 3);
@@ -102,7 +75,7 @@ class CartIT extends AbstractIntegrationTest {
 
     @Test
     void shouldReplaceQuantityAndRemoveWhenSetToZero() throws Exception {
-        String productId = createProduct("Headset", "300.00");
+        String productId = catalogProduct("Headset", "300.00");
         addItem(productId, 4);
 
         mockMvc.perform(put("/cart/items/{productId}", productId)
@@ -122,7 +95,7 @@ class CartIT extends AbstractIntegrationTest {
 
     @Test
     void shouldRemoveItem() throws Exception {
-        String productId = createProduct("Webcam", "250.00");
+        String productId = catalogProduct("Webcam", "250.00");
         addItem(productId, 1);
 
         mockMvc.perform(delete("/cart/items/{productId}", productId))
@@ -132,8 +105,8 @@ class CartIT extends AbstractIntegrationTest {
 
     @Test
     void shouldTurnCartIntoOrderAndDiscardIt() throws Exception {
-        String keyboardId = createProduct("Teclado", "100.00");
-        String mouseId = createProduct("Mouse", "50.00");
+        String keyboardId = catalogProduct("Teclado", "100.00");
+        String mouseId = catalogProduct("Mouse", "50.00");
 
         addItem(keyboardId, 2);
         addItem(mouseId, 3);
@@ -159,7 +132,7 @@ class CartIT extends AbstractIntegrationTest {
 
     @Test
     void shouldFreezePriceAtCheckout() throws Exception {
-        String productId = createProduct("Notebook", "3000.00");
+        String productId = catalogProduct("Notebook", "3000.00");
         addItem(productId, 1);
 
         String response = mockMvc.perform(post("/cart/checkout"))
@@ -170,16 +143,7 @@ class CartIT extends AbstractIntegrationTest {
 
         String orderId = JsonPath.read(response, "$.id");
 
-        mockMvc.perform(put("/products/{id}", productId)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {
-                                    "name": "Notebook",
-                                    "description": "Descricao",
-                                    "price": 4500.00
-                                }
-                                """))
-                .andExpect(status().isOk());
+        putInCatalog(productId, "Notebook", "4500.00");
 
         mockMvc.perform(get("/orders/{id}", orderId))
                 .andExpect(jsonPath("$.items[0].unitPrice").value(3000.00))
@@ -188,7 +152,7 @@ class CartIT extends AbstractIntegrationTest {
 
     @Test
     void shouldRejectCheckoutOfAnEmptyCart() throws Exception {
-        String productId = createProduct("Cabo", "20.00");
+        String productId = catalogProduct("Cabo", "20.00");
         addItem(productId, 1);
         mockMvc.perform(delete("/cart/items/{productId}", productId))
                 .andExpect(status().isOk());
@@ -200,8 +164,8 @@ class CartIT extends AbstractIntegrationTest {
 
     @Test
     void shouldIgnoreItemsWhoseProductWasRemovedFromTheCatalog() throws Exception {
-        String keptId = createProduct("Teclado", "100.00");
-        String removedId = createProduct("Descontinuado", "70.00");
+        String keptId = catalogProduct("Teclado", "100.00");
+        String removedId = catalogProduct("Descontinuado", "70.00");
 
         addItem(keptId, 1);
         addItem(removedId, 2);
@@ -210,8 +174,7 @@ class CartIT extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.items.length()").value(2))
                 .andExpect(jsonPath("$.total").value(240.00));
 
-        mockMvc.perform(delete("/products/{id}", removedId))
-                .andExpect(status().isNoContent());
+        removeFromCatalog(removedId);
 
         mockMvc.perform(get("/cart"))
                 .andExpect(status().isOk())
@@ -222,14 +185,13 @@ class CartIT extends AbstractIntegrationTest {
 
     @Test
     void shouldRejectCheckoutWhenAProductIsNoLongerAvailable() throws Exception {
-        String keptId = createProduct("Teclado", "100.00");
-        String removedId = createProduct("Descontinuado", "70.00");
+        String keptId = catalogProduct("Teclado", "100.00");
+        String removedId = catalogProduct("Descontinuado", "70.00");
 
         addItem(keptId, 1);
         addItem(removedId, 2);
 
-        mockMvc.perform(delete("/products/{id}", removedId))
-                .andExpect(status().isNoContent());
+        removeFromCatalog(removedId);
 
         mockMvc.perform(post("/cart/checkout"))
                 .andExpect(status().isConflict())
@@ -247,18 +209,16 @@ class CartIT extends AbstractIntegrationTest {
 
     @Test
     void shouldListEveryUnavailableProductAtOnce() throws Exception {
-        String keptId = createProduct("Teclado", "100.00");
-        String firstRemovedId = createProduct("Descontinuado", "70.00");
-        String secondRemovedId = createProduct("Esgotado", "30.00");
+        String keptId = catalogProduct("Teclado", "100.00");
+        String firstRemovedId = catalogProduct("Descontinuado", "70.00");
+        String secondRemovedId = catalogProduct("Esgotado", "30.00");
 
         addItem(keptId, 1);
         addItem(firstRemovedId, 1);
         addItem(secondRemovedId, 1);
 
-        mockMvc.perform(delete("/products/{id}", firstRemovedId))
-                .andExpect(status().isNoContent());
-        mockMvc.perform(delete("/products/{id}", secondRemovedId))
-                .andExpect(status().isNoContent());
+        removeFromCatalog(firstRemovedId);
+        removeFromCatalog(secondRemovedId);
 
         mockMvc.perform(post("/cart/checkout"))
                 .andExpect(status().isConflict())
@@ -268,11 +228,10 @@ class CartIT extends AbstractIntegrationTest {
 
     @Test
     void shouldKeepTheCartWhenCheckoutIsRejected() throws Exception {
-        String productId = createProduct("Descontinuado", "70.00");
+        String productId = catalogProduct("Descontinuado", "70.00");
         addItem(productId, 2);
 
-        mockMvc.perform(delete("/products/{id}", productId))
-                .andExpect(status().isNoContent());
+        removeFromCatalog(productId);
 
         mockMvc.perform(post("/cart/checkout"))
                 .andExpect(status().isConflict());
@@ -289,7 +248,7 @@ class CartIT extends AbstractIntegrationTest {
 
     @Test
     void shouldKeepEachUserCartSeparate() throws Exception {
-        String productId = createProduct("Teclado", "100.00");
+        String productId = catalogProduct("Teclado", "100.00");
 
         mockMvc.perform(post("/cart/items")
                         .header(HttpHeaders.AUTHORIZATION, asUser())
