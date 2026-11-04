@@ -11,28 +11,33 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class DirectCallWithoutCredentialE2E extends AbstractE2E {
 
-    @ParameterizedTest(name = "{0}{1}")
+    @ParameterizedTest(name = "{0} {1} {2}")
     @CsvSource({
-            "monolith, /orders",
-            "monolith, /internal/orders/export",
-            "sales, /admin/sales/top-products",
-            "payment, /payments/orders/00000000-0000-0000-0000-000000000001"
+            "monolith, GET, /orders",
+            "monolith, GET, /internal/orders/export",
+            "sales, GET, /admin/sales/top-products",
+            "payment, GET, /payments/orders/00000000-0000-0000-0000-000000000001",
+            "catalog, POST, /products"
     })
-    void shouldRefuseADirectCallWithoutCredential(String service, String protectedPath) {
-        assertEquals(401, send(HttpRequest.newBuilder(service(service, protectedPath)).GET()).statusCode());
+    void shouldRefuseADirectCallWithoutCredential(String service, String method, String protectedPath) {
+        HttpRequest.Builder request = HttpRequest.newBuilder(service(service, protectedPath))
+                .method(method, HttpRequest.BodyPublishers.noBody());
+
+        assertEquals(401, send(request).statusCode());
     }
 
-    @ParameterizedTest(name = "{0}{1}")
+    @ParameterizedTest(name = "{0} {1} {2}")
     @CsvSource({
-            "monolith, /orders",
-            "monolith, /internal/orders/export",
-            "sales, /admin/sales/top-products",
-            "payment, /payments/orders/00000000-0000-0000-0000-000000000001"
+            "monolith, GET, /orders",
+            "monolith, GET, /internal/orders/export",
+            "sales, GET, /admin/sales/top-products",
+            "payment, GET, /payments/orders/00000000-0000-0000-0000-000000000001",
+            "catalog, POST, /products"
     })
-    void shouldRefuseADirectCallWithATokenSignedByAnotherKey(String service, String protectedPath) {
+    void shouldRefuseADirectCallWithATokenSignedByAnotherKey(String service, String method, String protectedPath) {
         HttpRequest.Builder request = HttpRequest.newBuilder(service(service, protectedPath))
                 .header("Authorization", TestTokens.bearer(UUID.randomUUID(), "ADMIN"))
-                .GET();
+                .method(method, HttpRequest.BodyPublishers.noBody());
 
         assertEquals(401, send(request).statusCode());
     }

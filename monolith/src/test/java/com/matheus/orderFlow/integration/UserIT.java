@@ -351,17 +351,9 @@ class UserIT extends AbstractIntegrationTest {
 
         assertTrue(payload.contains("ADMIN"));
 
-        mockMvc.perform(post("/products")
-                        .header("Authorization", "Bearer " + token)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {
-                                    "name": "Teclado",
-                                    "description": "Mecanico",
-                                    "price": 100.00
-                                }
-                                """))
-                .andExpect(status().isCreated());
+        mockMvc.perform(get("/internal/orders/export")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk());
     }
 
     @Test

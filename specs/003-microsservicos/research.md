@@ -154,7 +154,11 @@ Resilience4j 2.3.0, Testcontainers 2.0.5. Em 2026-10-24: Gatling 3.16.0 e
   pagamento, com `ignore-exceptions: HttpClientErrorException` e fallback
   declarado só para falha de conexão, tempo esgotado, 5xx e circuito aberto. O
   `ignore-exceptions` só tira a exceção da contagem, e o fallback é escolhido pelo
-  tipo da exceção: um fallback genérico transformaria um 4xx em 503. Timeouts:
+  tipo da exceção: um fallback genérico transformaria um 4xx em 503. O 404 do
+  `catalog` vira `NotFoundException` dentro do método protegido, então ela também
+  entra no `ignore-exceptions`. O circuit breaker e a tradução do 404 ficam num
+  `CatalogService`, a porta de entrada do pacote; a interface HTTP é
+  package-private. Timeouts:
   1,5 s por chamada ao `catalog` e 3,5 s do `cart` para o `orders`. URLs por DNS
   do Docker Compose, sem descoberta de serviços. Os nomes das propriedades dos
   clientes HTTP do Boot 4 devem ser conferidos no classpath.

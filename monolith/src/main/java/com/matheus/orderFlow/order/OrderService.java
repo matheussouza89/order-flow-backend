@@ -1,10 +1,10 @@
 package com.matheus.orderFlow.order;
 
+import com.matheus.orderFlow.catalog.CatalogService;
 import com.matheus.orderFlow.contracts.order.OrderCancelledEvent;
 import com.matheus.orderFlow.contracts.order.OrderConfirmedEvent;
 import com.matheus.orderFlow.contracts.order.OrderDeliveredEvent;
 import com.matheus.orderFlow.contracts.order.OrderShippedEvent;
-import com.matheus.orderFlow.product.ProductService;
 import com.matheus.orderFlow.shared.exception.DomainValidationException;
 import com.matheus.orderFlow.shared.exception.NotFoundException;
 import com.matheus.orderFlow.shared.security.AuthenticatedUser;
@@ -33,7 +33,7 @@ public class OrderService {
     private static final int MAX_EXPORT_SIZE = 500;
 
     private final OrderRepository orderRepository;
-    private final ProductService productService;
+    private final CatalogService catalogService;
     private final ApplicationEventPublisher events;
     private final AuthenticatedUser authenticatedUser;
 
@@ -81,14 +81,13 @@ public class OrderService {
                         BinaryOperator.minBy(Comparator.<Instant>naturalOrder())));
     }
 
-    @Transactional
     public OrderResponse createOrder(OrderDto dto) {
         List<OrderItemDto> itemsDto = dto.items() == null ? List.of() : dto.items();
 
         List<OrderItem> orderItems = itemsDto.stream()
                 .map(itemDto -> {
-                    var productResponse = productService.getProduct(itemDto.productId());
-                    return new OrderItem(productResponse.id(), productResponse.name(), productResponse.price(), itemDto.quantity());
+                    var product = catalogService.getProduct(itemDto.productId());
+                    return new OrderItem(product.id(), product.name(), product.price(), itemDto.quantity());
                 })
                 .toList();
         Order savedOrder = orderRepository.save(

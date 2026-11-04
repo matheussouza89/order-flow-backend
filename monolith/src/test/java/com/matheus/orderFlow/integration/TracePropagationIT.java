@@ -51,19 +51,11 @@ class TracePropagationIT extends AbstractIntegrationTest {
     private ConfirmedTraces confirmedTraces;
 
     private String createOrder() throws Exception {
-        String product = mockMvc.perform(post("/products")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                { "name": "Teclado", "description": "Mecanico", "price": 100.00 }
-                                """))
-                .andExpect(status().isCreated())
-                .andReturn().getResponse().getContentAsString();
-
         String order = mockMvc.perform(post("/orders")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 { "items": [ { "productId": "%s", "quantity": 1 } ] }
-                                """.formatted(JsonPath.<String>read(product, "$.id"))))
+                                """.formatted(catalogProduct("Teclado", "100.00"))))
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
 

@@ -41,25 +41,11 @@ class SecurityIT extends AbstractIntegrationTest {
 
     private MockMvc mockMvc;
 
-    private static final String PRODUCT_JSON = """
-            {
-                "name": "Teclado",
-                "description": "Mecanico",
-                "price": 100.00
-            }
-            """;
-
     @BeforeEach
     void buildMockMvcWithoutDefaultToken() {
         mockMvc = MockMvcBuilders.webAppContextSetup(context)
                 .addFilters(springSecurityFilterChain)
                 .build();
-    }
-
-    @Test
-    void shouldLeaveTheCatalogOpenToAnonymousVisitors() throws Exception {
-        mockMvc.perform(get("/products")).andExpect(status().isOk());
-        mockMvc.perform(get("/products/{id}", UUID.randomUUID())).andExpect(status().isNotFound());
     }
 
     @Test
@@ -94,39 +80,6 @@ class SecurityIT extends AbstractIntegrationTest {
         mockMvc.perform(get("/carts/{id}", "qualquer")).andExpect(status().isUnauthorized());
         mockMvc.perform(get("/users/{id}", UUID.randomUUID()))
                 .andExpect(status().isUnauthorized());
-    }
-
-    @Test
-    void shouldRequireAuthenticationToChangeTheCatalog() throws Exception {
-        mockMvc.perform(post("/products")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(PRODUCT_JSON))
-                .andExpect(status().isUnauthorized());
-
-        mockMvc.perform(delete("/products/{id}", UUID.randomUUID()))
-                .andExpect(status().isUnauthorized());
-    }
-
-    @Test
-    void shouldForbidARegularUserFromChangingTheCatalog() throws Exception {
-        mockMvc.perform(post("/products")
-                        .header(HttpHeaders.AUTHORIZATION, asUser())
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(PRODUCT_JSON))
-                .andExpect(status().isForbidden());
-
-        mockMvc.perform(delete("/products/{id}", UUID.randomUUID())
-                        .header(HttpHeaders.AUTHORIZATION, asUser()))
-                .andExpect(status().isForbidden());
-    }
-
-    @Test
-    void shouldAllowAnAdministratorToChangeTheCatalog() throws Exception {
-        mockMvc.perform(post("/products")
-                        .header(HttpHeaders.AUTHORIZATION, asAdmin())
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(PRODUCT_JSON))
-                .andExpect(status().isCreated());
     }
 
     @Test
@@ -180,21 +133,12 @@ class SecurityIT extends AbstractIntegrationTest {
     }
 
     private String pendingOrder() throws Exception {
-        String productResponse = mockMvc.perform(post("/products")
-                        .header(HttpHeaders.AUTHORIZATION, asAdmin())
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(PRODUCT_JSON))
-                .andExpect(status().isCreated())
-                .andReturn().getResponse().getContentAsString();
-
-        String productId = com.jayway.jsonpath.JsonPath.read(productResponse, "$.id");
-
         String orderResponse = mockMvc.perform(post("/orders")
                         .header(HttpHeaders.AUTHORIZATION, asUser())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 { "items": [ { "productId": "%s", "quantity": 1 } ] }
-                                """.formatted(productId)))
+                                """.formatted(catalogProduct("Teclado", "100.00"))))
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
 
@@ -382,10 +326,8 @@ class SecurityIT extends AbstractIntegrationTest {
 
     @Test
     void shouldAnswerForbiddenWithTheStandardErrorBody() throws Exception {
-        mockMvc.perform(post("/products")
-                        .header(HttpHeaders.AUTHORIZATION, asUser())
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(PRODUCT_JSON))
+        mockMvc.perform(get("/internal/orders/export")
+                        .header(HttpHeaders.AUTHORIZATION, asUser()))
                 .andExpect(status().isForbidden())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.status").value(403))

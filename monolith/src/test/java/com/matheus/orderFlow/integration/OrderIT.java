@@ -22,26 +22,6 @@ class OrderIT extends AbstractIntegrationTest {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
-    private String createProduct(String name, String price) throws Exception {
-        String json = """
-                {
-                    "name": "%s",
-                    "description": "Descricao",
-                    "price": %s
-                }
-                """.formatted(name, price);
-
-        String response = mockMvc.perform(post("/products")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(json))
-                .andExpect(status().isCreated())
-                .andReturn()
-                .getResponse()
-                .getContentAsString();
-
-        return JsonPath.read(response, "$.id");
-    }
-
     private String orderJson(String productId, int quantity) {
         return """
                 {
@@ -54,7 +34,7 @@ class OrderIT extends AbstractIntegrationTest {
 
     @Test
     void shouldCreateOrderTakingNameAndPriceFromCatalog() throws Exception {
-        String productId = createProduct("Teclado", "100.00");
+        String productId = catalogProduct("Teclado", "100.00");
 
         mockMvc.perform(post("/orders")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -73,7 +53,7 @@ class OrderIT extends AbstractIntegrationTest {
 
     @Test
     void shouldPersistItemsLinkedToTheOrder() throws Exception {
-        String productId = createProduct("Mouse", "50.00");
+        String productId = catalogProduct("Mouse", "50.00");
 
         String response = mockMvc.perform(post("/orders")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -96,7 +76,7 @@ class OrderIT extends AbstractIntegrationTest {
 
     @Test
     void shouldKeepOriginalPriceAfterProductIsUpdated() throws Exception {
-        String productId = createProduct("Monitor", "800.00");
+        String productId = catalogProduct("Monitor", "800.00");
 
         String response = mockMvc.perform(post("/orders")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -108,18 +88,7 @@ class OrderIT extends AbstractIntegrationTest {
 
         String orderId = JsonPath.read(response, "$.id");
 
-        String updatedProduct = """
-                {
-                    "name": "Monitor 4K",
-                    "description": "Descricao",
-                    "price": 1200.00
-                }
-                """;
-
-        mockMvc.perform(put("/products/{id}", productId)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(updatedProduct))
-                .andExpect(status().isOk());
+        putInCatalog(productId, "Monitor 4K", "1200.00");
 
         mockMvc.perform(get("/orders/{id}", orderId))
                 .andExpect(status().isOk())
@@ -130,8 +99,8 @@ class OrderIT extends AbstractIntegrationTest {
 
     @Test
     void shouldSumTotalAcrossSeveralItems() throws Exception {
-        String keyboardId = createProduct("Teclado", "100.00");
-        String mouseId = createProduct("Mouse", "50.00");
+        String keyboardId = catalogProduct("Teclado", "100.00");
+        String mouseId = catalogProduct("Mouse", "50.00");
 
         String json = """
                 {
@@ -204,7 +173,7 @@ class OrderIT extends AbstractIntegrationTest {
 
     @Test
     void shouldWalkThroughTheWholeDeliveryFlow() throws Exception {
-        String orderId = createOrder(createProduct("Teclado", "100.00"));
+        String orderId = createOrder(catalogProduct("Teclado", "100.00"));
 
         mockMvc.perform(get("/orders/{id}", orderId))
                 .andExpect(jsonPath("$.status").value("PENDING"));
@@ -220,7 +189,7 @@ class OrderIT extends AbstractIntegrationTest {
 
     @Test
     void shouldPersistStatusBetweenRequests() throws Exception {
-        String orderId = createOrder(createProduct("Mouse", "50.00"));
+        String orderId = createOrder(catalogProduct("Mouse", "50.00"));
 
         transition(orderId, "confirm", "CONFIRMED");
 
@@ -231,7 +200,7 @@ class OrderIT extends AbstractIntegrationTest {
 
     @Test
     void shouldCancelOrderBeforeShipping() throws Exception {
-        String orderId = createOrder(createProduct("Monitor", "800.00"));
+        String orderId = createOrder(catalogProduct("Monitor", "800.00"));
 
         transition(orderId, "confirm", "CONFIRMED");
         transition(orderId, "cancel", "CANCELLED");
@@ -242,7 +211,7 @@ class OrderIT extends AbstractIntegrationTest {
 
     @Test
     void shouldRejectCancellingAShippedOrder() throws Exception {
-        String orderId = createOrder(createProduct("Headset", "300.00"));
+        String orderId = createOrder(catalogProduct("Headset", "300.00"));
 
         transition(orderId, "confirm", "CONFIRMED");
         transition(orderId, "ship", "SHIPPED");
@@ -257,7 +226,7 @@ class OrderIT extends AbstractIntegrationTest {
 
     @Test
     void shouldRejectSkippingAStepInTheFlow() throws Exception {
-        String orderId = createOrder(createProduct("Webcam", "250.00"));
+        String orderId = createOrder(catalogProduct("Webcam", "250.00"));
 
         mockMvc.perform(post("/orders/{id}/ship", orderId))
                 .andExpect(status().isConflict());
@@ -268,7 +237,7 @@ class OrderIT extends AbstractIntegrationTest {
 
     @Test
     void shouldStartNewOrderWithVersionZero() throws Exception {
-        createOrder(createProduct("Teclado", "100.00"));
+        createOrder(catalogProduct("Teclado", "100.00"));
 
         Long version = jdbcTemplate.queryForObject("SELECT version FROM orders", Long.class);
 
@@ -277,7 +246,7 @@ class OrderIT extends AbstractIntegrationTest {
 
     @Test
     void shouldIncrementVersionOnEveryTransition() throws Exception {
-        String orderId = createOrder(createProduct("Teclado", "100.00"));
+        String orderId = createOrder(catalogProduct("Teclado", "100.00"));
 
         transition(orderId, "confirm", "CONFIRMED");
         transition(orderId, "ship", "SHIPPED");
@@ -290,7 +259,7 @@ class OrderIT extends AbstractIntegrationTest {
 
     @Test
     void shouldStampConfirmationEventWithTheMomentOfTheTransition() throws Exception {
-        String orderId = createOrder(createProduct("Teclado", "100.00"));
+        String orderId = createOrder(catalogProduct("Teclado", "100.00"));
 
         Instant before = Instant.now();
         transition(orderId, "confirm", "CONFIRMED");

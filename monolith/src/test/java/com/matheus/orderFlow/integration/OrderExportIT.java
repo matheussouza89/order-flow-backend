@@ -41,7 +41,7 @@ class OrderExportIT extends AbstractIntegrationTest {
 
     @Test
     void shouldExportOnlyOrdersThatWereConfirmed() throws Exception {
-        String productId = createProduct("Teclado", "100.00");
+        String productId = catalogProduct("Teclado", "100.00");
         String pending = createOrder(productId);
         String confirmed = confirmedOrder(productId);
         String shipped = confirmedOrder(productId);
@@ -59,7 +59,7 @@ class OrderExportIT extends AbstractIntegrationTest {
 
     @Test
     void shouldCarryWhatTheReportsNeedWithTheMomentOfConfirmation() throws Exception {
-        String orderId = confirmedOrder(createProduct("Teclado", "100.00"));
+        String orderId = confirmedOrder(catalogProduct("Teclado", "100.00"));
         transition(orderId, "ship");
 
         String response = export("");
@@ -108,14 +108,14 @@ class OrderExportIT extends AbstractIntegrationTest {
 
     @Test
     void shouldHandOutOneHundredOrdersPerPageByDefault() throws Exception {
-        confirmedOrder(createProduct("Teclado", "100.00"));
+        confirmedOrder(catalogProduct("Teclado", "100.00"));
 
         assertEquals(100, (int) JsonPath.read(export(""), "$.size"));
     }
 
     @Test
     void shouldWalkThroughEveryConfirmedOrderPageByPage() throws Exception {
-        String productId = createProduct("Teclado", "100.00");
+        String productId = catalogProduct("Teclado", "100.00");
         Set<String> confirmed = Set.of(confirmedOrder(productId), confirmedOrder(productId), confirmedOrder(productId));
 
         String first = export("?page=0&size=2");
@@ -172,22 +172,6 @@ class OrderExportIT extends AbstractIntegrationTest {
         return mockMvc.perform(get(EXPORT + query))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
-    }
-
-    private String createProduct(String name, String price) throws Exception {
-        String response = mockMvc.perform(post("/products")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {
-                                    "name": "%s",
-                                    "description": "Descricao",
-                                    "price": %s
-                                }
-                                """.formatted(name, price)))
-                .andExpect(status().isCreated())
-                .andReturn().getResponse().getContentAsString();
-
-        return JsonPath.read(response, "$.id");
     }
 
     private String createOrder(String productId) throws Exception {
