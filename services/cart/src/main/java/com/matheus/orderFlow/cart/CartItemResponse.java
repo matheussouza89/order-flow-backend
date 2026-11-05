@@ -1,7 +1,5 @@
 package com.matheus.orderFlow.cart;
 
-import com.matheus.orderFlow.catalog.CatalogProduct;
-
 import java.math.BigDecimal;
 import java.util.UUID;
 

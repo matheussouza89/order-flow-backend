@@ -3,6 +3,7 @@ package com.matheus.orderFlow.order;
 import com.matheus.orderFlow.shared.exception.ErrorResponse;
 import com.matheus.orderFlow.shared.web.PageResponse;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.headers.Header;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -64,19 +65,27 @@ class OrderController {
             description = """
                     Creates an order from catalog products. The client sends only product
                     identifiers and quantities; name, unit price, subtotal and total are
-                    taken from the catalog and frozen. The order starts as PENDING.""")
+                    taken from the catalog and frozen. The order starts as PENDING.
+
+                    With an Idempotency-Key, repeating the request returns the order already
+                    created for that key instead of creating another one.""")
     @ApiResponses({
-            @ApiResponse(responseCode = "201", description = "Order created successfully",
+            @ApiResponse(responseCode = "201", description = "Order created, or already created for the key",
                     headers = @Header(name = "Location", description = "URI of the created order",
                             schema = @Schema(type = "string"))),
-            @ApiResponse(responseCode = "400", description = "Order has no items, or an item has an invalid quantity",
+            @ApiResponse(responseCode = "400",
+                    description = "Order has no items, an item has an invalid quantity, or the key is too long",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "404", description = "One of the products does not exist",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     @PostMapping
-    public ResponseEntity<OrderResponse> createOrder(@RequestBody OrderDto orderDto) {
-        OrderResponse created = orderService.createOrder(orderDto);
+    public ResponseEntity<OrderResponse> createOrder(
+            @RequestBody OrderDto orderDto,
+            @Parameter(description = "Up to 64 characters, unique per user")
+            @RequestHeader(name = "Idempotency-Key", required = false) String idempotencyKey
+    ) {
+        OrderResponse created = orderService.createOrder(orderDto, idempotencyKey);
 
         URI location = ServletUriComponentsBuilder.fromCurrentRequest()
                 .path("/{id}")

@@ -1,6 +1,5 @@
 package com.matheus.orderFlow.integration;
 
-import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
@@ -9,6 +8,10 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.UUID;
 
+import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
+import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
+import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
+import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
 import static org.hamcrest.Matchers.containsString;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -107,47 +110,23 @@ class CartIT extends AbstractIntegrationTest {
     void shouldTurnCartIntoOrderAndDiscardIt() throws Exception {
         String keyboardId = catalogProduct("Teclado", "100.00");
         String mouseId = catalogProduct("Mouse", "50.00");
+        String orderId = acceptOrders();
 
         addItem(keyboardId, 2);
         addItem(mouseId, 3);
 
-        String response = mockMvc.perform(post("/cart/checkout"))
+        mockMvc.perform(post("/cart/checkout"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("PENDING"))
-                .andExpect(jsonPath("$.items.length()").value(2))
-                .andExpect(jsonPath("$.total").value(350.00))
-                .andReturn()
-                .getResponse()
-                .getContentAsString();
+                .andExpect(jsonPath("$.id").value(orderId));
 
-        String orderId = JsonPath.read(response, "$.id");
-
-        mockMvc.perform(get("/orders/{id}", orderId))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.total").value(350.00));
+        orders().verify(postRequestedFor(urlEqualTo("/orders"))
+                .withRequestBody(matchingJsonPath(
+                        "$.items[?(@.productId == '%s' && @.quantity == 2)]".formatted(keyboardId)))
+                .withRequestBody(matchingJsonPath(
+                        "$.items[?(@.productId == '%s' && @.quantity == 3)]".formatted(mouseId))));
 
         mockMvc.perform(get("/cart"))
                 .andExpect(status().isNotFound());
-    }
-
-    @Test
-    void shouldFreezePriceAtCheckout() throws Exception {
-        String productId = catalogProduct("Notebook", "3000.00");
-        addItem(productId, 1);
-
-        String response = mockMvc.perform(post("/cart/checkout"))
-                .andExpect(status().isOk())
-                .andReturn()
-                .getResponse()
-                .getContentAsString();
-
-        String orderId = JsonPath.read(response, "$.id");
-
-        putInCatalog(productId, "Notebook", "4500.00");
-
-        mockMvc.perform(get("/orders/{id}", orderId))
-                .andExpect(jsonPath("$.items[0].unitPrice").value(3000.00))
-                .andExpect(jsonPath("$.total").value(3000.00));
     }
 
     @Test
@@ -200,11 +179,15 @@ class CartIT extends AbstractIntegrationTest {
 
         mockMvc.perform(delete("/cart/items/{productId}", removedId))
                 .andExpect(status().isOk());
+        acceptOrders();
 
         mockMvc.perform(post("/cart/checkout"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.items.length()").value(1))
-                .andExpect(jsonPath("$.total").value(100.00));
+                .andExpect(status().isOk());
+
+        orders().verify(postRequestedFor(urlEqualTo("/orders"))
+                .withRequestBody(matchingJsonPath("$.items.length()", equalTo("1")))
+                .withRequestBody(matchingJsonPath(
+                        "$.items[?(@.productId == '%s' && @.quantity == 1)]".formatted(keptId))));
     }
 
     @Test

@@ -1,33 +1,44 @@
 package com.matheus.orderFlow.cart;
 
-import com.matheus.orderFlow.catalog.CatalogProduct;
-import com.matheus.orderFlow.catalog.CatalogService;
-import com.matheus.orderFlow.order.OrderDto;
-import com.matheus.orderFlow.order.OrderItemDto;
-import com.matheus.orderFlow.order.OrderResponse;
-import com.matheus.orderFlow.order.OrderService;
 import com.matheus.orderFlow.shared.exception.DomainValidationException;
 import com.matheus.orderFlow.shared.exception.NotFoundException;
+import com.matheus.orderFlow.shared.exception.ServiceUnavailableException;
 import com.matheus.orderFlow.shared.security.AuthenticatedUser;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import tools.jackson.databind.JsonNode;
 
 import java.math.BigDecimal;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class CartService {
     private final CartRepository cartRepository;
     private final CatalogService catalogService;
-    private final OrderService orderService;
+    private final OrdersService ordersService;
     private final AuthenticatedUser authenticatedUser;
+    private final Duration checkoutDeadline;
+
+    CartService(CartRepository cartRepository,
+                CatalogService catalogService,
+                OrdersService ordersService,
+                AuthenticatedUser authenticatedUser,
+                @Value("${orderflow.checkout.deadline}") Duration checkoutDeadline) {
+        this.cartRepository = cartRepository;
+        this.catalogService = catalogService;
+        this.ordersService = ordersService;
+        this.authenticatedUser = authenticatedUser;
+        this.checkoutDeadline = checkoutDeadline;
+    }
 
     public CartResponse getCart() {
         return toResponse(findOrThrow(currentCartId()));
@@ -73,7 +84,8 @@ public class CartService {
         return toResponse(cartRepository.save(cart));
     }
 
-    public OrderResponse checkout() {
+    public JsonNode checkout() {
+        Instant deadline = Instant.now().plus(checkoutDeadline);
         String cartId = currentCartId();
         Cart cart = findOrThrow(cartId);
 
@@ -82,21 +94,28 @@ public class CartService {
         }
 
         rejectUnavailableProducts(cart);
+        refuseAfter(deadline, ServiceClientsConfig.CATALOG);
 
-        OrderDto orderDto = new OrderDto(
-                cart.getItems().entrySet().stream()
-                        .map(entry -> new OrderItemDto(entry.getKey(), entry.getValue()))
-                        .toList()
-        );
+        String checkoutKey = cart.startCheckout();
+        cartRepository.save(cart);
 
-        OrderResponse order = orderService.createOrder(orderDto);
+        JsonNode order = ordersService.createOrder(checkoutKey, OrderRequest.of(cart.getItems()));
+        refuseAfter(deadline, ServiceClientsConfig.ORDERS);
 
         cartRepository.deleteById(cartId);
 
         log.info("Checkout completed: cartId={} orderId={} total={}",
-                cartId, order.id(), order.total());
+                cartId, order.path("id").asString(), order.path("total"));
 
         return order;
+    }
+
+    private void refuseAfter(Instant deadline, String service) {
+        if (Instant.now().isAfter(deadline)) {
+            log.warn("Checkout deadline exceeded waiting for {}", service);
+            throw new ServiceUnavailableException(service,
+                    new TimeoutException("Checkout took longer than " + checkoutDeadline));
+        }
     }
 
     private void rejectUnavailableProducts(Cart cart) {

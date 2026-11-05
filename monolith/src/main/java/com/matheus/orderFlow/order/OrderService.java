@@ -12,6 +12,7 @@ import com.matheus.orderFlow.shared.web.PageResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -22,6 +23,7 @@ import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.function.BinaryOperator;
 import java.util.stream.Collectors;
@@ -81,7 +83,15 @@ public class OrderService {
                         BinaryOperator.minBy(Comparator.<Instant>naturalOrder())));
     }
 
-    public OrderResponse createOrder(OrderDto dto) {
+    public OrderResponse createOrder(OrderDto dto, String idempotencyKey) {
+        UUID userId = authenticatedUser.requireId();
+
+        Optional<Order> alreadyCreated = findByIdempotencyKey(userId, idempotencyKey);
+        if (alreadyCreated.isPresent()) {
+            log.info("Order already created for the idempotency key: id={}", alreadyCreated.get().getId());
+            return OrderResponse.from(alreadyCreated.get());
+        }
+
         List<OrderItemDto> itemsDto = dto.items() == null ? List.of() : dto.items();
 
         List<OrderItem> orderItems = itemsDto.stream()
@@ -90,13 +100,26 @@ public class OrderService {
                     return new OrderItem(product.id(), product.name(), product.price(), itemDto.quantity());
                 })
                 .toList();
-        Order savedOrder = orderRepository.save(
-                new Order(authenticatedUser.requireId(), orderItems));
+
+        Order savedOrder;
+        try {
+            savedOrder = orderRepository.save(new Order(userId, orderItems, idempotencyKey));
+        } catch (DataIntegrityViolationException exception) {
+            return findByIdempotencyKey(userId, idempotencyKey)
+                    .map(OrderResponse::from)
+                    .orElseThrow(() -> exception);
+        }
 
         log.info("Order created: id={} total={} items={}",
                 savedOrder.getId(), savedOrder.getTotal(), savedOrder.getItems().size());
 
         return OrderResponse.from(savedOrder);
+    }
+
+    private Optional<Order> findByIdempotencyKey(UUID userId, String idempotencyKey) {
+        return idempotencyKey == null
+                ? Optional.empty()
+                : orderRepository.findByUserIdAndIdempotencyKey(userId, idempotencyKey);
     }
 
     private Order findOrThrow(UUID orderId) {

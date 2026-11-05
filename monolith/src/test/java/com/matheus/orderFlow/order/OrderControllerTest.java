@@ -75,7 +75,7 @@ public class OrderControllerTest {
     void shouldCreateOrder() throws Exception {
         UUID productId = UUID.randomUUID();
 
-        when(orderService.createOrder(any(OrderDto.class)))
+        when(orderService.createOrder(any(OrderDto.class), isNull()))
                 .thenReturn(orderWith(productId, OrderStatus.PENDING));
 
         mockMvc.perform(post("/orders")
@@ -93,7 +93,23 @@ public class OrderControllerTest {
                 .andExpect(jsonPath("$.items[0].quantity").value(2))
                 .andExpect(jsonPath("$.items[0].subtotal").value(200.00));
 
-        verify(orderService).createOrder(any(OrderDto.class));
+        verify(orderService).createOrder(any(OrderDto.class), isNull());
+    }
+
+    @Test
+    void shouldPassTheIdempotencyKeyToTheService() throws Exception {
+        UUID productId = UUID.randomUUID();
+
+        when(orderService.createOrder(any(OrderDto.class), eq("key")))
+                .thenReturn(orderWith(productId, OrderStatus.PENDING));
+
+        mockMvc.perform(post("/orders")
+                        .header("Idempotency-Key", "key")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody(productId)))
+                .andExpect(status().isCreated());
+
+        verify(orderService).createOrder(any(OrderDto.class), eq("key"));
     }
 
     @Test
@@ -172,7 +188,7 @@ public class OrderControllerTest {
     void shouldReturnBadRequestWhenQuantityIsInvalid() throws Exception {
         UUID productId = UUID.randomUUID();
 
-        when(orderService.createOrder(any(OrderDto.class)))
+        when(orderService.createOrder(any(OrderDto.class), isNull()))
                 .thenThrow(new DomainValidationException(
                         "quantity", "Quantity must be greater than zero"));
 
@@ -188,7 +204,7 @@ public class OrderControllerTest {
     void shouldReturnNotFoundWhenProductDoesNotExist() throws Exception {
         UUID productId = UUID.randomUUID();
 
-        when(orderService.createOrder(any(OrderDto.class)))
+        when(orderService.createOrder(any(OrderDto.class), isNull()))
                 .thenThrow(new NotFoundException(productId));
 
         mockMvc.perform(post("/orders")
@@ -209,7 +225,7 @@ public class OrderControllerTest {
                         .content(invalidJson))
                 .andExpect(status().isBadRequest());
 
-        verify(orderService, never()).createOrder(any(OrderDto.class));
+        verify(orderService, never()).createOrder(any(OrderDto.class), isNull());
     }
 
     @Test

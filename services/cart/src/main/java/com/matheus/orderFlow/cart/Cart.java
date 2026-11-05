@@ -21,6 +21,8 @@ class Cart {
 
     private Map<UUID, Integer> items;
 
+    private String checkoutKey;
+
     @TimeToLive
     private long ttlSeconds;
 
@@ -85,6 +87,13 @@ class Cart {
 
     boolean isEmpty() {
         return getItems().isEmpty();
+    }
+
+    String startCheckout() {
+        if (checkoutKey == null) {
+            checkoutKey = UUID.randomUUID().toString();
+        }
+        return checkoutKey;
     }
 
     private void ensureItems() {

@@ -11,6 +11,7 @@ services:
       SALES_URL: http://sales:8080
       PAYMENT_URL: http://payment:8080
       CATALOG_URL: http://catalog:8080
+      CART_URL: http://cart:8080
       ZIPKIN_ENDPOINT: http://zipkin:9411/api/v2/spans
       JAVA_TOOL_OPTIONS: -Xmx256m
     ports:
@@ -30,6 +31,8 @@ services:
         condition: service_healthy
       catalog:
         condition: service_healthy
+      cart:
+        condition: service_healthy
     networks:
       - orderflow-network
 
@@ -44,6 +47,8 @@ services:
       SPRING_DATASOURCE_USERNAME: orderflow
       SPRING_DATASOURCE_PASSWORD: orderflow
       SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_USERNAME: monolith
+      SPRING_DATA_REDIS_PASSWORD: ${REDIS_MONOLITH_PASSWORD:-monolith}
       SPRING_RABBITMQ_HOST: rabbitmq
       CATALOG_URL: http://catalog:8080
       ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@orderflow.local}
@@ -149,6 +154,33 @@ services:
     networks:
       - orderflow-network
 
+  cart:
+    build:
+      context: .
+      args:
+        MODULE: services/cart
+    restart: unless-stopped
+    environment:
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_USERNAME: cart
+      SPRING_DATA_REDIS_PASSWORD: ${REDIS_CART_PASSWORD:-cart}
+      CATALOG_URL: http://catalog:8080
+      ORDERS_URL: http://monolith:8080
+      JWK_SET_URI: http://monolith:8080/.well-known/jwks.json
+      ZIPKIN_ENDPOINT: http://zipkin:9411/api/v2/spans
+      JAVA_TOOL_OPTIONS: -Xmx256m
+    healthcheck:
+      test: ["CMD", "curl", "-fs", "http://localhost:8080/actuator/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 40
+      start_period: 30s
+    depends_on:
+      redis:
+        condition: service_started
+    networks:
+      - orderflow-network
+
   wiremock:
     image: wiremock/wiremock:3.9.1
     restart: unless-stopped
@@ -184,6 +216,12 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
+    command: [
+      "redis-server",
+      "--user", "default", "off",
+      "--user", "monolith", "on", ">${REDIS_MONOLITH_PASSWORD:-monolith}", "~refreshToken*", "+@all", "-@dangerous", "+info",
+      "--user", "cart", "on", ">${REDIS_CART_PASSWORD:-cart}", "~cart*", "+@all", "-@dangerous", "+info"
+    ]
     ports:
       - "6379:6379"
     volumes:

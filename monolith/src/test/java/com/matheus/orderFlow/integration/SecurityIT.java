@@ -75,9 +75,8 @@ class SecurityIT extends AbstractIntegrationTest {
     }
 
     @Test
-    void shouldRequireAuthenticationOnOrdersCartsAndUsers() throws Exception {
+    void shouldRequireAuthenticationOnOrdersAndUsers() throws Exception {
         mockMvc.perform(get("/orders")).andExpect(status().isUnauthorized());
-        mockMvc.perform(get("/carts/{id}", "qualquer")).andExpect(status().isUnauthorized());
         mockMvc.perform(get("/users/{id}", UUID.randomUUID()))
                 .andExpect(status().isUnauthorized());
     }

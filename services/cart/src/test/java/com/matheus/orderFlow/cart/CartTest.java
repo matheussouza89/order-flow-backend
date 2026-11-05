@@ -112,6 +112,16 @@ class CartTest {
     }
 
     @Test
+    void shouldKeepTheSameCheckoutKeyAcrossAttempts() {
+        Cart cart = new Cart("user-1");
+
+        String firstAttempt = cart.startCheckout();
+
+        assertNotNull(firstAttempt);
+        assertEquals(firstAttempt, cart.startCheckout());
+    }
+
+    @Test
     void shouldRenewTimeToLiveOnEveryChange() {
         Cart cart = new Cart("user-1");
         long initialTtl = cart.getTtlSeconds();

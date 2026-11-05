@@ -24,8 +24,8 @@ import org.springframework.context.annotation.Configuration;
                 contact = @Contact(name = "Matheus Souza"),
                 description = """
                         ## Purpose
-                        REST API for customer orders, covering accounts, the shopping cart, order
-                        creation and the order lifecycle up to delivery.
+                        REST API for customer orders, covering accounts, order creation and the
+                        order lifecycle up to delivery.
 
                         ## Context
                         An order is a historical document, not a live view of the catalog. When
@@ -42,10 +42,10 @@ import org.springframework.context.annotation.Configuration;
 
                         ## Catalog
                         The products under `/products` are served by their own service and
-                        documented in its entry on this page. The cart and the order read name
-                        and price from it while the request runs. If the catalog does not answer
-                        within 1.5 seconds, the request responds **503** and changes nothing: the
-                        cart stays as it was, and listing your own orders keeps working.
+                        documented in its entry on this page. Creating an order reads name and
+                        price from it while the request runs. If the catalog does not answer
+                        within 1.5 seconds, the request responds **503** and creates nothing, and
+                        listing your own orders keeps working.
 
                         ## Accounts
                         `POST /auth/register` creates an account and returns **201** with the
@@ -60,26 +60,16 @@ import org.springframework.context.annotation.Configuration;
                         hashing.
 
                         ## Cart
-                        The cart belongs to the authenticated caller: there is no cart id in the
-                        URL, and `/cart` always means *your* cart.
+                        The cart under `/cart` is served by its own service and documented in its
+                        entry on this page. Its checkout creates the order with `POST /orders`.
 
-                        It is the opposite of the order: it holds only the product and the
-                        quantity, and reads name, price and total from the catalog on every
-                        request. A cart left open for days shows today's price, while an order
-                        keeps the price that applied when it was placed.
-
-                        A cart is created by its first item — there is no endpoint to create an
-                        empty one. It expires after seven days without changes.
-
-                        Checkout is the boundary between the two: it creates the order, freezing
-                        the current prices, and only then discards the cart.
-
-                        If a product is removed from the catalog, its item disappears from the
-                        cart and the total is recalculated without it, instead of the whole cart
-                        failing. Checkout is stricter: it refuses with **409 Conflict**, naming
-                        every unavailable product, rather than placing an order that differs from
-                        what the client reviewed. The cart is left untouched, so removing the
-                        item and trying again is enough.
+                        ## Repeating an order
+                        `POST /orders` accepts an optional `Idempotency-Key` of up to 64
+                        characters. Repeating the request with the same key returns the order
+                        already created for it — **201** with the same `Location` and body —
+                        instead of creating another one. Keys are independent per user, and
+                        without the header every request creates an order. The checkout sends
+                        one, so an order whose response was lost is not placed twice.
 
                         ## Order lifecycle
                         An order starts as PENDING and moves forward through business actions:
@@ -158,7 +148,7 @@ import org.springframework.context.annotation.Configuration;
                         does.
 
                         ## Who owns what
-                        Orders and carts belong to the user who created them. A caller only ever
+                        Orders belong to the user who created them. A caller only ever
                         reaches their own; an administrator reaches all of them.
 
                         Asking for someone else's order answers **404**, not 403: a

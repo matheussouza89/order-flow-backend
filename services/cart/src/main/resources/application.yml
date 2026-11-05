@@ -1,0 +1,59 @@
+spring:
+  application:
+    name: cart
+
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:localhost}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: ${JWK_SET_URI:http://monolith:8080/.well-known/jwks.json}
+
+  http:
+    serviceclient:
+      catalog:
+        base-url: ${CATALOG_URL:http://catalog:8080}
+        connect-timeout: 1500ms
+        read-timeout: 1500ms
+      orders:
+        base-url: ${ORDERS_URL:http://monolith:8080}
+        connect-timeout: 1500ms
+        read-timeout: 3500ms
+
+management:
+  tracing:
+    sampling:
+      probability: 1.0
+    export:
+      zipkin:
+        endpoint: ${ZIPKIN_ENDPOINT:http://localhost:9411/api/v2/spans}
+
+orderflow:
+  checkout:
+    deadline: 4s
+
+resilience4j:
+  circuitbreaker:
+    configs:
+      internal-service:
+        sliding-window-type: COUNT_BASED
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 10s
+        permitted-number-of-calls-in-half-open-state: 2
+        automatic-transition-from-open-to-half-open-enabled: true
+        ignore-exceptions:
+          - org.springframework.web.client.HttpClientErrorException
+    instances:
+      catalog:
+        base-config: internal-service
+        ignore-exceptions:
+          - org.springframework.web.client.HttpClientErrorException
+          - com.matheus.orderFlow.shared.exception.NotFoundException
+      orders:
+        base-config: internal-service

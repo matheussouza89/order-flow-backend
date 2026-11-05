@@ -12,15 +12,17 @@ resiliência, com autenticação por JWT, rotas protegidas por papel e recursos
 vinculados ao usuário do token (ver [Roadmap](#roadmap)).
 
 Está em andamento a separação em microsserviços, especificada em
-[specs/003-microsservicos](specs/003-microsservicos/spec.md). Quatro etapas estão
+[specs/003-microsservicos](specs/003-microsservicos/spec.md). Cinco etapas estão
 prontas. Na primeira, o cliente passou a entrar por um gateway, a credencial
 ficou verificável por qualquer serviço sem que ele consiga emiti-la, e o rastro
 de uma requisição atravessa serviços e mensagens. Na segunda, os relatórios de
 vendas viraram o primeiro serviço próprio, alimentado só pelos fatos dos
 pedidos. Na terceira, os pagamentos saíram com os próprios dados, num schema que
 só o serviço alcança. Na quarta, o catálogo virou serviço, e o carrinho e o
-pedido passaram a consultá-lo pela rede, com prazo e circuit breaker. O resto
-ainda roda num monólito atrás do gateway, que perde uma capacidade por etapa.
+pedido passaram a consultá-lo pela rede, com prazo e circuit breaker. Na quinta,
+o carrinho saiu também, e a finalização passou a atravessar dois serviços com
+prazo próprio e uma chave que impede o pedido duplicado. O resto ainda roda num
+monólito atrás do gateway, que perde uma capacidade por etapa.
 
 ---
 
@@ -32,7 +34,7 @@ ainda roda num monólito atrás do gateway, que perde uma capacidade por etapa.
 | Framework | Spring Boot 4.1.1 (Web MVC, Data JPA, Validation) |
 | Banco | MySQL 8.4 + Flyway |
 | Mensageria | RabbitMQ |
-| Dado efêmero | Redis (carrinho e refresh tokens, com TTL) |
+| Dado efêmero | Redis (carrinho e refresh tokens, com TTL e um usuário de ACL por serviço) |
 | Leitura de vendas | MongoDB (projeção de pedidos no serviço `sales`, com Spring Data MongoDB) |
 | Entrada única | Spring Cloud Gateway Server WebMVC |
 | Chamadas entre serviços | interfaces HTTP do Spring (`@HttpExchange`) sobre `RestClient` |
@@ -49,8 +51,8 @@ ainda roda num monólito atrás do gateway, que perde uma capacidade por etapa.
 
 **Pré-requisito:** Docker.
 
-Suba o projeto inteiro — gateway, monólito, serviços de catálogo, pagamentos e
-vendas, MySQL, MongoDB, Redis, RabbitMQ, WireMock e Zipkin:
+Suba o projeto inteiro — gateway, monólito, serviços de catálogo, carrinho,
+pagamentos e vendas, MySQL, MongoDB, Redis, RabbitMQ, WireMock e Zipkin:
 
 ```bash
 docker compose up --build
@@ -66,13 +68,14 @@ depende; o segundo leva apenas o jar para uma imagem com JRE. As conexões vêm 
 variáveis de ambiente, com o ambiente local como padrão, então a mesma imagem
 serve para qualquer ambiente.
 
-⚠️ Três variáveis não devem usar o padrão fora da máquina local:
+⚠️ Estas variáveis não devem usar o padrão fora da máquina local:
 
 | Variável | Por quê |
 |---|---|
 | `JWT_PRIVATE_KEY` | chave privada RSA, em PEM PKCS#8, que assina os tokens. Sem ela, uma chave é gerada na subida: serve para desenvolvimento, mas cada reinício invalida os tokens de acesso já emitidos (o refresh continua valendo) |
 | `ADMIN_EMAIL` | identifica o administrador criado na primeira subida |
 | `ADMIN_PASSWORD` | a senha dele; com o padrão, o log avisa na subida |
+| `REDIS_MONOLITH_PASSWORD`, `REDIS_CART_PASSWORD` | senhas dos usuários do Redis; o padrão é o nome do usuário |
 
 O administrador é criado automaticamente quando não existe nenhum, então subir
 o projeto já dá acesso às rotas de `ADMIN`.
@@ -109,19 +112,25 @@ rode o script de novo. Volume novo não precisa de nada.
 Para desenvolver com o monólito fora do container (Java 21 necessário), suba
 só a infraestrutura e rode os módulos pelo Maven. O monólito atende direto na
 porta 8080 e não precisa do MongoDB, que agora é só do serviço de vendas. O
-carrinho e o pedido consultam o catálogo, então ele sobe junto, na porta 8081,
-validando o token pelas chaves do monólito:
+pedido consulta o catálogo, então ele sobe junto, na porta 8081, validando o
+token pelas chaves do monólito. O carrinho, na 8082, só é preciso para a
+finalização. O Redis do Compose não aceita o usuário padrão, então cada um entra
+com o próprio:
 
 ```bash
 docker compose up -d mysql redis rabbitmq zipkin
 ```
 
 ```bash
-CATALOG_URL=http://localhost:8081 ./mvnw -pl monolith spring-boot:run
+SPRING_DATA_REDIS_USERNAME=monolith SPRING_DATA_REDIS_PASSWORD=monolith CATALOG_URL=http://localhost:8081 ./mvnw -pl monolith spring-boot:run
 ```
 
 ```bash
 JWK_SET_URI=http://localhost:8080/.well-known/jwks.json ./mvnw -pl services/catalog spring-boot:run -Dspring-boot.run.arguments=--server.port=8081
+```
+
+```bash
+SPRING_DATA_REDIS_USERNAME=cart SPRING_DATA_REDIS_PASSWORD=cart JWK_SET_URI=http://localhost:8080/.well-known/jwks.json CATALOG_URL=http://localhost:8081 ORDERS_URL=http://localhost:8080 ./mvnw -pl services/cart spring-boot:run -Dspring-boot.run.arguments=--server.port=8082
 ```
 
 | Recurso | URL |
@@ -142,45 +151,47 @@ alteração:
 ./mvnw test
 ```
 
-Roda os **263 testes unitários** em poucos segundos, sem Docker.
+Roda os **268 testes unitários** em poucos segundos, sem Docker.
 
 ```bash
 ./mvnw verify
 ```
 
-Roda os unitários **mais os 193 de integração**, que sobem MySQL, MongoDB, Redis e
+Roda os unitários **mais os 207 de integração**, que sobem MySQL, MongoDB, Redis e
 RabbitMQ reais via Testcontainers, e um WireMock fazendo as vezes do gateway de
-pagamento, do catálogo, do serviço atrás da entrada única ou da exportação de
-pedidos.
+pagamento, do catálogo, do serviço de pedidos, do serviço atrás da entrada única
+ou da exportação de pedidos.
 
 ```bash
 ./mvnw verify -Pe2e -pl e2e -am
 ```
 
-Roda os **28 testes ponta a ponta**, que constroem as imagens, sobem o Compose
+Roda os **37 testes ponta a ponta**, que constroem as imagens, sobem o Compose
 inteiro pelo Testcontainers e falam com o sistema pela porta 8080, como um
 cliente. São eles que provam o que só aparece com os serviços juntos: todas as
 rotas respondendo pela entrada única, a chamada direta sem credencial recusada,
 a documentação única cobrindo todas as rotas, os pedidos confirmados com os
 serviços de vendas e de pagamentos parados, a cobrança feita uma vez só quando
-o serviço volta, a finalização recusada no prazo com o catálogo parado e cada
-usuário do MySQL sem acesso ao schema dos outros. Usam as
+o serviço volta, a finalização recusada no prazo com o catálogo ou o monólito
+parados, um pedido só quando ela é repetida, e cada usuário do MySQL e do Redis
+sem acesso aos dados dos outros. Usam as
 mesmas portas do Compose, então a pilha de desenvolvimento precisa estar parada.
 
 | Módulo | Unitários | Integração | Ponta a ponta |
 |---|---|---|---|
-| `monolith` | 141 | 116 | — |
+| `monolith` | 131 | 105 | — |
 | `catalog` | 43 | 19 | — |
+| `cart` | 15 | 22 | — |
 | `payment` | 30 | 10 | — |
 | `sales` | 5 | 26 | — |
-| `gateway` | 2 | 22 | — |
+| `gateway` | 2 | 25 | — |
 | `platform-outbox` | 16 | — | — |
 | `contracts` | 7 | — | — |
 | `platform-web` | 6 | — | — |
 | `platform-security` | 6 | — | — |
 | `platform-messaging` | 5 | — | — |
 | `platform-test` | 2 | — | — |
-| `e2e` | — | — | 28 |
+| `e2e` | — | — | 37 |
 
 A separação é feita por convenção de nome: o Surefire pega só `*Test.java`, o
 Failsafe pega `*IT.java`. O teste que sobe o contexto inteiro se chama
@@ -243,8 +254,8 @@ roda com `-Xmx256m`.
 com.matheus.orderFlow/
 ├── user/             User, UserService, UserRepository, AuthController, UserController, DTOs
 ├── product/          catálogo, hoje no serviço próprio (services/catalog)
-├── catalog/          cliente do catálogo usado pelo carrinho e pelo pedido
-├── cart/             Cart, CartService, CartRepository, CartController, DTOs
+├── catalog/          cliente do catálogo usado pelo pedido
+├── cart/             carrinho, hoje no serviço próprio (services/cart)
 ├── order/            Order, OrderItem, OrderStatus, OrderService, OrderController, DTOs
 ├── payment/          cobrança, hoje no serviço próprio (services/payment)
 ├── sales/            relatórios de vendas, hoje no serviço próprio (services/sales)
@@ -996,6 +1007,14 @@ cabeçalhos de qualquer cliente, que poderia forjar o host. Para preservar o
 esse cabeçalho e ainda tenta subir para HTTP/2, o que cancelava chamadas com
 corpo.
 
+O HttpClient 5 tem uma estratégia de repetição ligada por padrão: uma resposta
+503 ou 429 faz o cliente reenviar a requisição um segundo depois, inclusive um
+`POST`. O teste ponta a ponta do carrinho mostrou o efeito: a finalização com o
+monólito parado chegava duas vezes ao `cart`, levava mais de 6 segundos e
+estourava os 5 que a especificação admite. A entrada desliga essas repetições.
+Repetir é decisão de quem chamou, que sabe se a operação admite repetição; a
+entrada só repassa.
+
 A documentação também tem uma página só, servida pela entrada, com uma entrada
 por serviço. Cada serviço documenta as próprias rotas, e as que a entrada não
 repassa ficam fora do documento.
@@ -1118,10 +1137,72 @@ criação do pedido deixou de abrir transação antes de consultar o catálogo:
 segurar uma conexão do banco enquanto se espera outro serviço esgota o pool sob
 carga, e a gravação já é atômica no `save` do repositório.
 
-O 503 do catálogo vem do monólito, com a mensagem `Service unavailable: catalog`;
+O 503 do catálogo vem de quem o chamou, com a mensagem `Service unavailable: catalog`;
 o da entrada única diz só `Service unavailable`. O teste ponta a ponta para o
 catálogo e confere a mensagem, o prazo de 5 segundos e o carrinho intacto depois
 que ele volta.
+
+### Carrinho, a finalização entre dois serviços
+
+O carrinho saiu por último entre os que dependem de outro na hora, porque a
+finalização é a única operação que atravessa serviços: o `cart` confere cada
+item no `catalog`, chama `POST /orders` no monólito, que consulta o catálogo de
+novo para copiar nome e preço, e só então apaga o carrinho.
+
+Atravessar a rede abre uma janela que não existia: o pedido é criado e a
+resposta se perde, por tempo esgotado ou porque a entrada única desistiu antes.
+O cliente vê erro, tenta de novo e, sem cuidado, ganha dois pedidos. Por isso, na
+primeira tentativa, o carrinho gera uma chave e a grava em si mesmo **antes** de
+chamar o pedido. Ela vai no cabeçalho `Idempotency-Key`, e o monólito a guarda
+com restrição única por usuário: a mesma chave devolve o pedido que já existe,
+com o mesmo `Location` e o mesmo corpo. Duas criações simultâneas com a mesma
+chave esbarram na restrição, e a que perde lê o pedido da que ganhou. A chave
+some com o carrinho depois do sucesso. Deduplicar pelo conteúdo do carrinho foi
+descartado: dois pedidos legítimos iguais virariam um.
+
+O teste do "mesmo corpo" achou um detalhe: a primeira resposta saía com o
+instante da criação em 100 nanossegundos, como o relógio do Java, e a repetição,
+lida do banco, em microssegundos, como a coluna guarda. A auditoria passou a
+truncar o instante para microssegundos, e o que a resposta mostra é o que fica
+gravado.
+
+A finalização tem **prazo de 4 segundos**, contado do início. As consultas ao
+catálogo, uma por item, somam tempo com o tamanho do carrinho, e a entrada única
+corta em 4,5 segundos. Sem prazo próprio, ela responderia 504 enquanto o `cart`
+seguia, criava o pedido e esvaziava o carrinho: erro para o cliente, com o
+pedido feito. Com o prazo, o `cart` não chama o pedido se o tempo já passou e não
+apaga o carrinho se ele passou durante a chamada. Nos dois casos responde 503 e
+guarda a chave, e a repetição devolve o pedido, se ele chegou a ser criado. Cada
+chamada tem o próprio limite, 1,5 segundo para o catálogo e 3,5 para o pedido, e o
+próprio circuit breaker. Como na etapa anterior, um 4xx do pedido chega ao cliente
+com o mesmo status e corpo: uma credencial que expirou no meio da compra continua
+sendo 401.
+
+A resposta da finalização é o pedido exatamente como o monólito o devolveu. O
+`cart` não lê o pedido, só o repassa, então não tem um tipo próprio para ele: um
+campo novo no pedido chega ao cliente sem mexer no carrinho.
+
+Nos outros serviços, o AspectJ que aplica a anotação do circuit breaker chega
+junto com o JPA. O `cart` não tem JPA, então declara `spring-boot-starter-aspectj`.
+
+No Redis, cada serviço entra com um usuário de ACL restrito ao prefixo das
+próprias chaves: `monolith` só alcança `refreshToken*`, e `cart` só alcança
+`cart*`. O usuário padrão fica desligado. Restringir as chaves não basta, porque
+um `FLUSHALL` não cita chave nenhuma e apagaria os dados do outro; os comandos da
+categoria `@dangerous` ficam fora, com exceção do `INFO`, que o health check usa.
+O teste ponta a ponta confere o `NOPERM` nos dois sentidos e no `FLUSHALL`.
+
+Com o monólito parado, a finalização falha em menos de 5 segundos e o carrinho
+fica como estava; quando ele volta, a repetição cria um pedido só. A falha pode
+ser o 503 do `cart` ou o 504 da entrada única, e o teste ponta a ponta aceita os
+dois. Com o container parado, o nome `monolith` some do DNS do Docker, que passa
+a consulta adiante e leva 16 segundos para dizer que ele não existe, tempo que o
+limite de conexão do cliente HTTP não cobre. Enquanto o Java ainda guarda o IP
+antigo, o `cart` estoura o limite de conexão e responde 503; depois disso, a
+entrada corta em 4,5 segundos. O estado é o mesmo nos dois casos, como o prazo
+previa: carrinho intacto e chave guardada. O 503 do próprio `cart` fica provado
+no teste de integração, com o pedido fora do ar e lento. Com o carrinho parado,
+consultar os próprios pedidos continua funcionando.
 
 ## Endpoints
 
@@ -1174,7 +1255,7 @@ falha fechando, não abrindo.
 | `POST` | `/cart/items` | 200 / 400 / 404 | Soma à quantidade; cria o carrinho no primeiro item |
 | `PUT` | `/cart/items/{productId}` | 200 / 400 / 404 | Substitui a quantidade; zero remove |
 | `DELETE` | `/cart/items/{productId}` | 200 / 404 | Remove o item |
-| `POST` | `/cart/checkout` | 200 / 400 / 409 | Gera o pedido e descarta o carrinho |
+| `POST` | `/cart/checkout` | 200 / 400 / 409 / 503 | Gera o pedido e descarta o carrinho |
 
 Não há `cartId` na URL: `/cart` é sempre o carrinho de quem chama, identificado
 pelo token. Também não há rota para criar um: ele nasce no primeiro item e morre
@@ -1218,6 +1299,10 @@ O corpo do `POST /orders` envia apenas o que o cliente pode decidir:
 
 Nome, preço e total vêm do catálogo e do domínio — nunca do cliente.
 
+O `POST /orders` aceita o cabeçalho opcional `Idempotency-Key`, de até 64
+caracteres. A mesma chave do mesmo usuário devolve o pedido já criado, em vez de
+criar outro; sem o cabeçalho, cada requisição cria um pedido.
+
 ---
 
 **Vendas (somente ADMIN)**
@@ -1258,7 +1343,7 @@ mesma versão não contam.
 - [x] Fila de espera e DLQ para status que chega antes da confirmação
 - [x] Reconstrução da projeção pela exportação do serviço de pedidos
 - [x] Relatórios administrativos de vendas por dia e por produto
-- [x] 484 testes, separados por velocidade (unitários, integração e ponta a ponta)
+- [x] 512 testes, separados por velocidade (unitários, integração e ponta a ponta)
 - [x] Separação em serviços, etapa 1: entrada única, credencial RS256 com JWKS,
   fatos com tipo versionado, rastreamento com Zipkin e linha de base de carga
 - [x] Separação em serviços, etapa 2: relatórios de vendas como serviço próprio,
@@ -1267,6 +1352,8 @@ mesma versão não contam.
   dados movidos de schema por `RENAME TABLE`
 - [x] Separação em serviços, etapa 4: catálogo como serviço próprio, consultado
   pela rede com prazo e circuit breaker
+- [x] Separação em serviços, etapa 5: carrinho como serviço próprio, com prazo de
+  finalização, chave de idempotência no pedido e um usuário do Redis por serviço
 - [x] Pipeline de CI rodando `mvn verify` a cada push
 - [x] Imagem da aplicação e stack completa em Docker, com conexões por variável de ambiente
 - [x] Documentação OpenAPI

@@ -15,7 +15,13 @@ spring:
             - id: monolith
               uri: ${MONOLITH_URL:http://monolith:8080}
               predicates:
-                - Path=/auth/**,/users/**,/cart/**,/orders/**
+                - Path=/auth/**,/users/**,/orders/**
+              filters:
+                - PreserveHostHeader
+            - id: cart
+              uri: ${CART_URL:http://cart:8080}
+              predicates:
+                - Path=/cart/**
               filters:
                 - PreserveHostHeader
             - id: catalog
@@ -40,6 +46,13 @@ spring:
               uri: ${MONOLITH_URL:http://monolith:8080}
               predicates:
                 - Path=/v3/api-docs/monolith
+              filters:
+                - PreserveHostHeader
+                - SetPath=/v3/api-docs
+            - id: cart-docs
+              uri: ${CART_URL:http://cart:8080}
+              predicates:
+                - Path=/v3/api-docs/cart
               filters:
                 - PreserveHostHeader
                 - SetPath=/v3/api-docs
@@ -78,6 +91,8 @@ springdoc:
     urls:
       - name: monolith
         url: /v3/api-docs/monolith
+      - name: cart
+        url: /v3/api-docs/cart
       - name: catalog
         url: /v3/api-docs/catalog
       - name: payment
