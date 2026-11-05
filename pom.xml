@@ -25,6 +25,7 @@
 		<module>services/sales</module>
 		<module>services/payment</module>
 		<module>services/catalog</module>
+		<module>services/cart</module>
 		<module>load</module>
 	</modules>
 

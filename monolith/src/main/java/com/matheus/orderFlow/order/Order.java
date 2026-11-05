@@ -22,6 +22,7 @@ import java.util.UUID;
 @Getter
 class Order {
     private static final int STATUS_MAX_LENGTH = 20;
+    private static final int IDEMPOTENCY_KEY_MAX_LENGTH = 64;
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
@@ -29,6 +30,9 @@ class Order {
 
     @Column(name = "user_id", nullable = false, updatable = false)
     private UUID userId;
+
+    @Column(name = "idempotency_key", length = IDEMPOTENCY_KEY_MAX_LENGTH, updatable = false)
+    private String idempotencyKey;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = STATUS_MAX_LENGTH)
@@ -55,10 +59,12 @@ class Order {
     protected Order() {
     }
 
-    Order(UUID userId, List<OrderItem> items) {
+    Order(UUID userId, List<OrderItem> items, String idempotencyKey) {
         validate(userId, items);
+        validateIdempotencyKey(idempotencyKey);
 
         this.userId = userId;
+        this.idempotencyKey = idempotencyKey;
         this.status = OrderStatus.PENDING;
         items.forEach(this::addItem);
         recalculateTotal();
@@ -75,6 +81,13 @@ class Order {
 
         if (items == null || items.isEmpty()) {
             throw new DomainValidationException("items", "Order must have at least one item");
+        }
+    }
+
+    private void validateIdempotencyKey(String idempotencyKey) {
+        if (idempotencyKey != null && idempotencyKey.length() > IDEMPOTENCY_KEY_MAX_LENGTH) {
+            throw new DomainValidationException("idempotencyKey",
+                    "Idempotency key must have at most " + IDEMPOTENCY_KEY_MAX_LENGTH + " characters");
         }
     }
 

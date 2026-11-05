@@ -30,6 +30,7 @@ class DocumentationIT {
     private static final WireMockServer SALES = new WireMockServer(options().dynamicPort());
     private static final WireMockServer PAYMENT = new WireMockServer(options().dynamicPort());
     private static final WireMockServer CATALOG = new WireMockServer(options().dynamicPort());
+    private static final WireMockServer CART = new WireMockServer(options().dynamicPort());
     private static final String MONOLITH_DOCS = """
             {"openapi":"3.1.0","info":{"title":"OrderFlow API"},"paths":{"/orders":{}}}""";
     private static final String SALES_DOCS = """
@@ -38,12 +39,15 @@ class DocumentationIT {
             {"openapi":"3.1.0","info":{"title":"OrderFlow Payments API"},"paths":{"/payments/{id}":{}}}""";
     private static final String CATALOG_DOCS = """
             {"openapi":"3.1.0","info":{"title":"OrderFlow Catalog API"},"paths":{"/products":{}}}""";
+    private static final String CART_DOCS = """
+            {"openapi":"3.1.0","info":{"title":"OrderFlow Cart API"},"paths":{"/cart":{}}}""";
 
     static {
         MONOLITH.start();
         SALES.start();
         PAYMENT.start();
         CATALOG.start();
+        CART.start();
     }
 
     @DynamicPropertySource
@@ -52,6 +56,7 @@ class DocumentationIT {
         registry.add("SALES_URL", SALES::baseUrl);
         registry.add("PAYMENT_URL", PAYMENT::baseUrl);
         registry.add("CATALOG_URL", CATALOG::baseUrl);
+        registry.add("CART_URL", CART::baseUrl);
     }
 
     @AfterAll
@@ -60,6 +65,7 @@ class DocumentationIT {
         SALES.stop();
         PAYMENT.stop();
         CATALOG.stop();
+        CART.stop();
     }
 
     @LocalServerPort
@@ -90,6 +96,7 @@ class DocumentationIT {
 
         assertThat(urls).containsExactlyInAnyOrder(
                 Map.of("name", "monolith", "url", "/v3/api-docs/monolith"),
+                Map.of("name", "cart", "url", "/v3/api-docs/cart"),
                 Map.of("name", "catalog", "url", "/v3/api-docs/catalog"),
                 Map.of("name", "payment", "url", "/v3/api-docs/payment"),
                 Map.of("name", "sales", "url", "/v3/api-docs/sales"));
@@ -101,11 +108,13 @@ class DocumentationIT {
         serveDocs(SALES, SALES_DOCS);
         serveDocs(PAYMENT, PAYMENT_DOCS);
         serveDocs(CATALOG, CATALOG_DOCS);
+        serveDocs(CART, CART_DOCS);
 
         assertEquals(MONOLITH_DOCS, fetch("/v3/api-docs/monolith").body());
         assertEquals(SALES_DOCS, fetch("/v3/api-docs/sales").body());
         assertEquals(PAYMENT_DOCS, fetch("/v3/api-docs/payment").body());
         assertEquals(CATALOG_DOCS, fetch("/v3/api-docs/catalog").body());
+        assertEquals(CART_DOCS, fetch("/v3/api-docs/cart").body());
     }
 
     private static void serveDocs(WireMockServer service, String document) {

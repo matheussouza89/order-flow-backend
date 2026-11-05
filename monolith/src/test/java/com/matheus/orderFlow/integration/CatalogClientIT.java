@@ -64,15 +64,6 @@ class CatalogClientIT extends AbstractIntegrationTest {
         return order(productId, new HttpHeaders());
     }
 
-    private void addItem(String productId, int quantity) throws Exception {
-        mockMvc.perform(post("/cart/items")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                { "productId": "%s", "quantity": %d }
-                                """.formatted(productId, quantity)))
-                .andExpect(status().isOk());
-    }
-
     @Test
     void shouldForwardTheCallerCredentialToTheCatalog() throws Exception {
         String productId = catalogProduct("Teclado", "100.00");
@@ -99,16 +90,14 @@ class CatalogClientIT extends AbstractIntegrationTest {
     }
 
     @Test
-    void shouldRefuseTheCheckoutOfARemovedProductWithoutOpeningTheCircuit() throws Exception {
+    void shouldRefuseAnOrderForARemovedProductWithoutOpeningTheCircuit() throws Exception {
         String removedId = catalogProduct("Descontinuado", "70.00");
-        addItem(removedId, 1);
         removeFromCatalog(removedId);
 
         for (int attempt = 0; attempt < 6; attempt++) {
-            mockMvc.perform(post("/cart/checkout"))
-                    .andExpect(status().isConflict())
-                    .andExpect(jsonPath("$.message")
-                            .value("Cart contains products that are no longer available: " + removedId));
+            order(removedId)
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.message").value("Could not find: " + removedId));
         }
 
         assertEquals(CircuitBreaker.State.CLOSED, breaker().getState());
@@ -131,25 +120,19 @@ class CatalogClientIT extends AbstractIntegrationTest {
     }
 
     @Test
-    void shouldAnswerServiceUnavailableInTimeWhenTheCatalogIsSlowAndKeepTheCart() throws Exception {
-        String productId = catalogProduct("Teclado", "100.00");
-        addItem(productId, 2);
+    void shouldAnswerServiceUnavailableInTimeWhenTheCatalogIsSlow() throws Exception {
+        String productId = UUID.randomUUID().toString();
         catalog().stubFor(WireMock.get("/products/" + productId).willReturn(okJson("""
                 { "id": "%s", "name": "Teclado", "price": 100.00 }
                 """.formatted(productId)).withFixedDelay(2_000)));
 
         Instant start = Instant.now();
-        mockMvc.perform(post("/cart/checkout"))
+        order(productId)
                 .andExpect(status().isServiceUnavailable())
                 .andExpect(jsonPath("$.status").value(503))
                 .andExpect(jsonPath("$.message").value("Service unavailable: catalog"));
         assertThat(Duration.between(start, Instant.now())).isLessThan(Duration.ofSeconds(5));
 
-        putInCatalog(productId, "Teclado", "100.00");
-
-        mockMvc.perform(get("/cart"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.items[0].quantity").value(2));
         mockMvc.perform(get("/orders"))
                 .andExpect(jsonPath("$.totalElements").value(0));
     }

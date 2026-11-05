@@ -23,6 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 public abstract class AbstractE2E {
     private static final String ADMIN_EMAIL = "admin@orderflow.local";
     private static final String ADMIN_PASSWORD = "change-me-in-production";
+    protected static final String CUSTOMER_PASSWORD = "senhaSegura1";
     private static final int HTTP_PORT = 8080;
 
     private static final ComposeContainer COMPOSE = new ComposeContainer(new File("../docker-compose.yml"))
@@ -33,6 +34,7 @@ public abstract class AbstractE2E {
             .withExposedService("sales", HTTP_PORT, healthy())
             .withExposedService("payment", HTTP_PORT, healthy())
             .withExposedService("catalog", HTTP_PORT, healthy())
+            .withExposedService("cart", HTTP_PORT, healthy())
             .withExposedService("wiremock", HTTP_PORT);
 
     private static final HttpClient HTTP = HttpClient.newHttpClient();
@@ -129,14 +131,13 @@ public abstract class AbstractE2E {
 
     protected static Customer newCustomer() {
         String email = "customer-" + UUID.randomUUID() + "@example.com";
-        String password = "senhaSegura1";
 
         HttpResponse<String> registered = post("/auth/register", null, """
                 { "name": "Cliente", "email": "%s", "password": "%s" }
-                """.formatted(email, password));
+                """.formatted(email, CUSTOMER_PASSWORD));
         assertEquals(201, registered.statusCode(), registered.body());
 
-        HttpResponse<String> login = login(email, password);
+        HttpResponse<String> login = login(email, CUSTOMER_PASSWORD);
 
         return new Customer(read(registered, "$.id"), email, read(login, "$.token"), read(login, "$.refreshToken"));
     }

@@ -1,5 +1,6 @@
 package com.matheus.orderFlow.order;
 
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 
@@ -8,6 +9,7 @@ import org.springframework.data.domain.Pageable;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 interface OrderRepository extends JpaRepository<Order, UUID> {
@@ -21,6 +23,9 @@ interface OrderRepository extends JpaRepository<Order, UUID> {
             """;
 
     Page<Order> findByUserId(UUID userId, Pageable pageable);
+
+    @EntityGraph(attributePaths = "items")
+    Optional<Order> findByUserIdAndIdempotencyKey(UUID userId, String idempotencyKey);
 
     @Query(value = "SELECT o.* " + CONFIRMED_ORDERS + "ORDER BY o.created_at, o.id",
             countQuery = "SELECT COUNT(*) " + CONFIRMED_ORDERS,

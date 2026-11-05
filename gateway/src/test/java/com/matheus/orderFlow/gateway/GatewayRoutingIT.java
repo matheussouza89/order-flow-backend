@@ -42,6 +42,7 @@ class GatewayRoutingIT {
     private static final WireMockServer SALES = new WireMockServer(options().port(freePort()));
     private static final WireMockServer PAYMENT = new WireMockServer(options().port(freePort()));
     private static final WireMockServer CATALOG = new WireMockServer(options().port(freePort()));
+    private static final WireMockServer CART = new WireMockServer(options().port(freePort()));
     private static final String TOKEN = "Bearer any-token";
     private static final String CONFLICT = """
             {"status":409,"message":"Only pending orders can be confirmed","errors":{}}""";
@@ -51,6 +52,7 @@ class GatewayRoutingIT {
         SALES.start();
         PAYMENT.start();
         CATALOG.start();
+        CART.start();
     }
 
     private static int freePort() {
@@ -67,6 +69,7 @@ class GatewayRoutingIT {
         registry.add("SALES_URL", SALES::baseUrl);
         registry.add("PAYMENT_URL", PAYMENT::baseUrl);
         registry.add("CATALOG_URL", CATALOG::baseUrl);
+        registry.add("CART_URL", CART::baseUrl);
     }
 
     @AfterAll
@@ -75,6 +78,7 @@ class GatewayRoutingIT {
         SALES.stop();
         PAYMENT.stop();
         CATALOG.stop();
+        CART.stop();
     }
 
     @LocalServerPort
@@ -88,6 +92,7 @@ class GatewayRoutingIT {
         SALES.resetAll();
         PAYMENT.resetAll();
         CATALOG.resetAll();
+        CART.resetAll();
     }
 
     private HttpResponse<String> send(HttpRequest.Builder request) throws IOException, InterruptedException {
@@ -118,7 +123,7 @@ class GatewayRoutingIT {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"/auth/login", "/users/1", "/cart", "/orders"})
+    @ValueSource(strings = {"/auth/login", "/users/1", "/orders"})
     void shouldRouteThePrefixesStillInTheMonolithToIt(String path) throws Exception {
         MONOLITH.stubFor(WireMock.any(urlEqualTo(path)).willReturn(aResponse().withStatus(200)));
 
@@ -126,6 +131,17 @@ class GatewayRoutingIT {
         SALES.verify(0, anyRequestedFor(anyUrl()));
         PAYMENT.verify(0, anyRequestedFor(anyUrl()));
         CATALOG.verify(0, anyRequestedFor(anyUrl()));
+        CART.verify(0, anyRequestedFor(anyUrl()));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"/cart", "/cart/items", "/cart/checkout"})
+    void shouldRouteTheCartToTheCartService(String path) throws Exception {
+        CART.stubFor(WireMock.any(urlEqualTo(path)).willReturn(aResponse().withStatus(200)));
+
+        assertEquals(200, send(to(path).header("Authorization", TOKEN).GET()).statusCode());
+        CART.verify(anyRequestedFor(urlEqualTo(path)).withHeader("Authorization", equalTo(TOKEN)));
+        MONOLITH.verify(0, anyRequestedFor(anyUrl()));
     }
 
     @ParameterizedTest
@@ -184,6 +200,24 @@ class GatewayRoutingIT {
         SALES.verify(0, anyRequestedFor(anyUrl()));
         PAYMENT.verify(0, anyRequestedFor(anyUrl()));
         CATALOG.verify(0, anyRequestedFor(anyUrl()));
+        CART.verify(0, anyRequestedFor(anyUrl()));
+    }
+
+    @Test
+    void shouldNotRepeatARequestTheServiceAnsweredWithServiceUnavailable() throws Exception {
+        String unavailable = """
+                {"status":503,"message":"Service unavailable: orders","errors":{}}""";
+        CART.stubFor(post(urlEqualTo("/cart/checkout"))
+                .willReturn(aResponse().withStatus(503).withHeader("Content-Type", "application/json")
+                        .withBody(unavailable)));
+
+        HttpResponse<String> response = send(to("/cart/checkout")
+                .header("Authorization", TOKEN)
+                .POST(HttpRequest.BodyPublishers.noBody()));
+
+        assertEquals(503, response.statusCode());
+        assertEquals(unavailable, response.body());
+        CART.verify(1, postRequestedFor(urlEqualTo("/cart/checkout")));
     }
 
     @Test

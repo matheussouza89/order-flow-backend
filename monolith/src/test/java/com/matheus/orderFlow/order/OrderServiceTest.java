@@ -23,6 +23,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.dao.DataIntegrityViolationException;
 
 import java.math.BigDecimal;
 import java.util.EnumSet;
@@ -129,7 +130,8 @@ public class OrderServiceTest {
                 OWNER_ID,
                 List.of(
                         new OrderItem(UUID.randomUUID(), "Teclado", new BigDecimal("100.00"), 2)
-                )
+                ),
+                null
         );
 
         if (status == OrderStatus.PENDING) return order;
@@ -182,7 +184,7 @@ public class OrderServiceTest {
 
         OrderDto dto = new OrderDto(List.of(new OrderItemDto(productId, 2)));
 
-        OrderResponse result = orderService.createOrder(dto);
+        OrderResponse result = orderService.createOrder(dto, null);
 
         assertEquals(1, result.items().size());
 
@@ -215,10 +217,59 @@ public class OrderServiceTest {
                 new OrderItemDto(mouseId, 3)
         ));
 
-        OrderResponse result = orderService.createOrder(dto);
+        OrderResponse result = orderService.createOrder(dto, null);
 
         assertEquals(2, result.items().size());
         assertEquals(0, new BigDecimal("350.00").compareTo(result.total()));
+    }
+
+    @Test
+    void shouldReturnTheOrderAlreadyCreatedForTheKeyWithoutCallingTheCatalog() {
+        Order existing = orderAt(OrderStatus.PENDING);
+        when(orderRepository.findByUserIdAndIdempotencyKey(OWNER_ID, "key"))
+                .thenReturn(Optional.of(existing));
+
+        OrderDto dto = new OrderDto(List.of(new OrderItemDto(UUID.randomUUID(), 1)));
+
+        OrderResponse result = orderService.createOrder(dto, "key");
+
+        assertEquals(existing.getTotal(), result.total());
+        verifyNoInteractions(catalogService);
+        verify(orderRepository, never()).save(any(Order.class));
+    }
+
+    @Test
+    void shouldReturnTheWinnerWhenAConcurrentCreationTakesTheKeyFirst() {
+        UUID productId = UUID.randomUUID();
+        Order winner = orderAt(OrderStatus.PENDING);
+
+        when(catalogService.getProduct(productId))
+                .thenReturn(catalogProduct(productId, "Teclado", "100.00"));
+        when(orderRepository.findByUserIdAndIdempotencyKey(OWNER_ID, "key"))
+                .thenReturn(Optional.empty(), Optional.of(winner));
+        when(orderRepository.save(any(Order.class)))
+                .thenThrow(new DataIntegrityViolationException("uk_orders_user_idempotency_key"));
+
+        OrderDto dto = new OrderDto(List.of(new OrderItemDto(productId, 2)));
+
+        OrderResponse result = orderService.createOrder(dto, "key");
+
+        assertEquals(winner.getTotal(), result.total());
+    }
+
+    @Test
+    void shouldPropagateAnIntegrityViolationThatIsNotAboutTheKey() {
+        UUID productId = UUID.randomUUID();
+
+        when(catalogService.getProduct(productId))
+                .thenReturn(catalogProduct(productId, "Teclado", "100.00"));
+        when(orderRepository.save(any(Order.class)))
+                .thenThrow(new DataIntegrityViolationException("other"));
+
+        OrderDto dto = new OrderDto(List.of(new OrderItemDto(productId, 2)));
+
+        assertThrows(DataIntegrityViolationException.class, () -> orderService.createOrder(dto, null));
+        verify(orderRepository, never()).findByUserIdAndIdempotencyKey(any(), any());
     }
 
     @Test
@@ -230,7 +281,7 @@ public class OrderServiceTest {
 
         OrderDto dto = new OrderDto(List.of(new OrderItemDto(productId, 1)));
 
-        assertThrows(NotFoundException.class, () -> orderService.createOrder(dto));
+        assertThrows(NotFoundException.class, () -> orderService.createOrder(dto, null));
 
         verify(orderRepository, never()).save(any(Order.class));
     }
@@ -239,7 +290,7 @@ public class OrderServiceTest {
     void shouldRejectOrderWithoutItems() {
         OrderDto dto = new OrderDto(List.of());
 
-        assertThrows(DomainValidationException.class, () -> orderService.createOrder(dto));
+        assertThrows(DomainValidationException.class, () -> orderService.createOrder(dto, null));
 
         verify(orderRepository, never()).save(any(Order.class));
     }
@@ -248,7 +299,7 @@ public class OrderServiceTest {
     void shouldRejectOrderWithNullItems() {
         OrderDto dto = new OrderDto(null);
 
-        assertThrows(DomainValidationException.class, () -> orderService.createOrder(dto));
+        assertThrows(DomainValidationException.class, () -> orderService.createOrder(dto, null));
 
         verify(orderRepository, never()).save(any(Order.class));
     }
@@ -262,7 +313,7 @@ public class OrderServiceTest {
 
         OrderDto dto = new OrderDto(List.of(new OrderItemDto(productId, null)));
 
-        assertThrows(DomainValidationException.class, () -> orderService.createOrder(dto));
+        assertThrows(DomainValidationException.class, () -> orderService.createOrder(dto, null));
 
         verify(orderRepository, never()).save(any(Order.class));
     }
@@ -276,7 +327,7 @@ public class OrderServiceTest {
 
         OrderDto dto = new OrderDto(List.of(new OrderItemDto(productId, 0)));
 
-        assertThrows(DomainValidationException.class, () -> orderService.createOrder(dto));
+        assertThrows(DomainValidationException.class, () -> orderService.createOrder(dto, null));
 
         verify(orderRepository, never()).save(any(Order.class));
     }
