@@ -25,10 +25,6 @@ class CheckoutE2E extends AbstractE2E {
         return customer;
     }
 
-    private static String signInAgain(Customer customer) {
-        return "Bearer " + read(login(customer.email(), CUSTOMER_PASSWORD), "$.token");
-    }
-
     @Test
     void shouldCreateTheOrderAndEmptyTheCartThroughTheSingleEntry() {
         Customer customer = customerWithCart(2);
@@ -67,11 +63,11 @@ class CheckoutE2E extends AbstractE2E {
                 .atMost(Duration.ofSeconds(90))
                 .pollInterval(Duration.ofSeconds(2))
                 .ignoreExceptions()
-                .until(() -> post("/cart/checkout", signInAgain(customer), ""),
+                .until(() -> post("/cart/checkout", customer.bearer(), ""),
                         response -> response.statusCode() == 200);
         String orderId = read(retried, "$.id");
 
-        HttpResponse<String> orders = get("/orders", signInAgain(customer));
+        HttpResponse<String> orders = get("/orders", customer.bearer());
         assertEquals(200, orders.statusCode(), orders.body());
         assertEquals(1, (int) read(orders, "$.totalElements"));
         assertEquals(orderId, read(orders, "$.content[0].id"));

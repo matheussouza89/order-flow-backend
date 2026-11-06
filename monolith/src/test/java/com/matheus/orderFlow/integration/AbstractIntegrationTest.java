@@ -3,28 +3,26 @@ package com.matheus.orderFlow.integration;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.client.WireMock;
 import com.matheus.orderFlow.TestcontainersConfiguration;
+import com.matheus.orderFlow.shared.test.TestJwtDecoderConfiguration;
+import com.matheus.orderFlow.shared.test.TestTokens;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
-import org.springframework.data.redis.connection.DataType;
-import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
-import com.matheus.orderFlow.user.TokenService;
 
-import java.util.Map;
 import java.util.UUID;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.options;
 
-@Import({TestcontainersConfiguration.class, DefaultAuthenticationConfiguration.class})
-@SpringBootTest(properties = "orderflow.security.bcrypt-strength=4")
+@Import({TestcontainersConfiguration.class, TestJwtDecoderConfiguration.class, DefaultAuthenticationConfiguration.class})
+@SpringBootTest
 @AutoConfigureMockMvc
 public abstract class AbstractIntegrationTest {
 
@@ -44,12 +42,6 @@ public abstract class AbstractIntegrationTest {
 
     @Autowired
     private CircuitBreakerRegistry circuitBreakerRegistry;
-
-    @Autowired
-    private RedisConnectionFactory redisConnectionFactory;
-
-    @Autowired
-    private TokenService tokenService;
 
     private final UUID customerId = UUID.randomUUID();
     private final UUID administratorId = UUID.randomUUID();
@@ -71,7 +63,7 @@ public abstract class AbstractIntegrationTest {
     }
 
     protected String bearer(UUID userId, String role) {
-        return "Bearer " + tokenService.generateToken(userId, role);
+        return TestTokens.bearer(userId, role);
     }
 
     protected static WireMockServer catalog() {
@@ -99,43 +91,11 @@ public abstract class AbstractIntegrationTest {
                         {"status":404,"message":"Resource not found: %s","errors":{}}""".formatted(id))));
     }
 
-    protected boolean redisContains(String value) {
-        try (var connection = redisConnectionFactory.getConnection()) {
-            for (byte[] key : connection.keyCommands().keys("*".getBytes())) {
-                if (new String(key).contains(value)) {
-                    return true;
-                }
-
-                if (connection.keyCommands().type(key) != DataType.HASH) {
-                    continue;
-                }
-
-                Map<byte[], byte[]> hash = connection.hashCommands().hGetAll(key);
-
-                if (hash == null) {
-                    continue;
-                }
-
-                boolean found = hash.values().stream()
-                        .anyMatch(stored -> stored != null && new String(stored).contains(value));
-
-                if (found) {
-                    return true;
-                }
-            }
-
-            return false;
-        }
-    }
-
     @BeforeEach
     void cleanDatabase() {
         jdbcTemplate.execute("DELETE FROM outbox_messages");
         jdbcTemplate.execute("DELETE FROM order_items");
         jdbcTemplate.execute("DELETE FROM orders");
-        jdbcTemplate.execute("DELETE FROM users");
-
-        redisConnectionFactory.getConnection().serverCommands().flushDb();
 
         CATALOG.resetAll();
         circuitBreakerRegistry.circuitBreaker("catalog").reset();

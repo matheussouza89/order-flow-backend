@@ -18,7 +18,8 @@ class DirectCallWithoutCredentialE2E extends AbstractE2E {
             "sales, GET, /admin/sales/top-products",
             "payment, GET, /payments/orders/00000000-0000-0000-0000-000000000001",
             "catalog, POST, /products",
-            "cart, GET, /cart"
+            "cart, GET, /cart",
+            "identity, GET, /users/00000000-0000-0000-0000-000000000001"
     })
     void shouldRefuseADirectCallWithoutCredential(String service, String method, String protectedPath) {
         HttpRequest.Builder request = HttpRequest.newBuilder(service(service, protectedPath))
@@ -34,7 +35,8 @@ class DirectCallWithoutCredentialE2E extends AbstractE2E {
             "sales, GET, /admin/sales/top-products",
             "payment, GET, /payments/orders/00000000-0000-0000-0000-000000000001",
             "catalog, POST, /products",
-            "cart, GET, /cart"
+            "cart, GET, /cart",
+            "identity, GET, /users/00000000-0000-0000-0000-000000000001"
     })
     void shouldRefuseADirectCallWithATokenSignedByAnotherKey(String service, String method, String protectedPath) {
         HttpRequest.Builder request = HttpRequest.newBuilder(service(service, protectedPath))

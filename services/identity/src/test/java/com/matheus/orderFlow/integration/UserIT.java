@@ -340,9 +340,10 @@ class UserIT extends AbstractIntegrationTest {
     }
 
     @Test
-    void shouldLetTheBootstrappedAdministratorLogInAndReachAdminRoutes() throws Exception {
+    void shouldLetTheBootstrappedAdministratorLogInAndReachAnyAccount() throws Exception {
         jdbcTemplate.execute("DELETE FROM users");
         adminBootstrap.run(null);
+        String customerId = register("Cliente", "cliente@example.com", "senhaSegura1");
 
         String response = login("admin@orderflow.local", "change-me-in-production");
 
@@ -351,7 +352,7 @@ class UserIT extends AbstractIntegrationTest {
 
         assertTrue(payload.contains("ADMIN"));
 
-        mockMvc.perform(get("/internal/orders/export")
+        mockMvc.perform(get("/users/{id}", customerId)
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk());
     }

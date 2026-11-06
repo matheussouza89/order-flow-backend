@@ -1,6 +1,5 @@
 package com.matheus.orderFlow.integration;
 
-import com.matheus.orderFlow.user.TokenService;
 import com.nimbusds.jose.jwk.JWKSet;
 import com.nimbusds.jose.jwk.RSAKey;
 import com.nimbusds.jose.jwk.gen.RSAKeyGenerator;
@@ -11,6 +10,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
+import org.springframework.security.oauth2.jose.jws.SignatureAlgorithm;
 import org.springframework.security.oauth2.jwt.JwsHeader;
 import org.springframework.security.oauth2.jwt.JwtClaimsSet;
 import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
@@ -49,36 +49,13 @@ class SecurityIT extends AbstractIntegrationTest {
     }
 
     @Test
-    void shouldLeaveRegistrationAndLoginOpen() throws Exception {
-        mockMvc.perform(post("/auth/register")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {
-                                    "name": "Matheus",
-                                    "email": "matheus@example.com",
-                                    "password": "senhaSegura1"
-                                }
-                                """))
-                .andExpect(status().isCreated());
-
-        mockMvc.perform(post("/auth/login")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                { "email": "matheus@example.com", "password": "senhaSegura1" }
-                                """))
-                .andExpect(status().isOk());
-    }
-
-    @Test
     void shouldLeaveTheDocumentationOpen() throws Exception {
         mockMvc.perform(get("/v3/api-docs")).andExpect(status().isOk());
     }
 
     @Test
-    void shouldRequireAuthenticationOnOrdersAndUsers() throws Exception {
+    void shouldRequireAuthenticationOnOrders() throws Exception {
         mockMvc.perform(get("/orders")).andExpect(status().isUnauthorized());
-        mockMvc.perform(get("/users/{id}", UUID.randomUUID()))
-                .andExpect(status().isUnauthorized());
     }
 
     @Test
@@ -186,75 +163,6 @@ class SecurityIT extends AbstractIntegrationTest {
     }
 
     @Test
-    void shouldForbidTouchingAnotherUsersAccount() throws Exception {
-        String victimId = register("vitima@example.com", "senhaDaVitima1");
-
-        mockMvc.perform(get("/users/{id}", victimId)
-                        .header(HttpHeaders.AUTHORIZATION, asUser()))
-                .andExpect(status().isForbidden());
-
-        mockMvc.perform(put("/users/{id}/password", victimId)
-                        .header(HttpHeaders.AUTHORIZATION, asUser())
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{ \"password\": \"senhaDoAtacante1\" }"))
-                .andExpect(status().isForbidden());
-
-        mockMvc.perform(put("/users/{id}/email", victimId)
-                        .header(HttpHeaders.AUTHORIZATION, asUser())
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{ \"email\": \"atacante@example.com\" }"))
-                .andExpect(status().isForbidden());
-
-        login("vitima@example.com", "senhaDaVitima1");
-    }
-
-    @Test
-    void shouldLetAUserChangeTheirOwnAccount() throws Exception {
-        String ownId = register("dono@example.com", "senhaDoDono1");
-
-        mockMvc.perform(get("/users/{id}", ownId)
-                        .header(HttpHeaders.AUTHORIZATION, bearer(UUID.fromString(ownId), "USER")))
-                .andExpect(status().isOk());
-
-        mockMvc.perform(put("/users/{id}/name", ownId)
-                        .header(HttpHeaders.AUTHORIZATION, bearer(UUID.fromString(ownId), "USER"))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{ \"name\": \"Nome Novo\" }"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.name").value("Nome Novo"));
-    }
-
-    @Test
-    void shouldLetAnAdministratorReachAnyAccount() throws Exception {
-        String victimId = register("outro@example.com", "senhaDoOutro1");
-
-        mockMvc.perform(get("/users/{id}", victimId)
-                        .header(HttpHeaders.AUTHORIZATION, asAdmin()))
-                .andExpect(status().isOk());
-    }
-
-    private String register(String email, String password) throws Exception {
-        String response = mockMvc.perform(post("/auth/register")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                { "name": "Fulano", "email": "%s", "password": "%s" }
-                                """.formatted(email, password)))
-                .andExpect(status().isCreated())
-                .andReturn().getResponse().getContentAsString();
-
-        return com.jayway.jsonpath.JsonPath.read(response, "$.id");
-    }
-
-    private void login(String email, String password) throws Exception {
-        mockMvc.perform(post("/auth/login")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                { "email": "%s", "password": "%s" }
-                                """.formatted(email, password)))
-                .andExpect(status().isOk());
-    }
-
-    @Test
     void shouldRejectAMalformedToken() throws Exception {
         mockMvc.perform(get("/orders").header(HttpHeaders.AUTHORIZATION, "Bearer nao-e-um-jwt"))
                 .andExpect(status().isUnauthorized());
@@ -273,10 +181,17 @@ class SecurityIT extends AbstractIntegrationTest {
     @Test
     void shouldRejectATokenSignedWithAnotherRsaKey() throws Exception {
         RSAKey foreignKey = new RSAKeyGenerator(2048).keyIDFromThumbprint(true).generate();
-        String foreignToken = new TokenService(
-                new NimbusJwtEncoder(new ImmutableJWKSet<>(new JWKSet(foreignKey))),
-                Duration.ofMinutes(15))
-                .generateToken(UUID.randomUUID(), "ADMIN");
+        String foreignToken = new NimbusJwtEncoder(new ImmutableJWKSet<>(new JWKSet(foreignKey)))
+                .encode(JwtEncoderParameters.from(
+                        JwsHeader.with(SignatureAlgorithm.RS256).build(),
+                        JwtClaimsSet.builder()
+                                .issuer("orderflow")
+                                .subject(UUID.randomUUID().toString())
+                                .claim("roles", List.of("ADMIN"))
+                                .issuedAt(Instant.now())
+                                .expiresAt(Instant.now().plus(Duration.ofMinutes(15)))
+                                .build()))
+                .getTokenValue();
 
         mockMvc.perform(get("/orders").header(HttpHeaders.AUTHORIZATION, "Bearer " + foreignToken))
                 .andExpect(status().isUnauthorized());

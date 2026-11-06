@@ -1,0 +1,49 @@
+spring:
+  application:
+    name: identity
+
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3308/identity}
+    username: ${SPRING_DATASOURCE_USERNAME:identity}
+    password: ${SPRING_DATASOURCE_PASSWORD:identity}
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    baseline-version: 0
+
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:localhost}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
+
+management:
+  tracing:
+    sampling:
+      probability: 1.0
+    export:
+      zipkin:
+        endpoint: ${ZIPKIN_ENDPOINT:http://localhost:9411/api/v2/spans}
+
+orderflow:
+  security:
+    public-paths:
+      - /auth/**
+      - /.well-known/jwks.json
+    admin:
+      name: ${ADMIN_NAME:Administrator}
+      email: ${ADMIN_EMAIL:admin@orderflow.local}
+      password: ${ADMIN_PASSWORD:change-me-in-production}
+    jwt:
+      private-key: ${JWT_PRIVATE_KEY:}
+      expiration: ${JWT_EXPIRATION:15m}
+      refresh-expiration: ${JWT_REFRESH_EXPIRATION:7d}
+
+springdoc:
+  paths-to-exclude:
+    - /.well-known/**
