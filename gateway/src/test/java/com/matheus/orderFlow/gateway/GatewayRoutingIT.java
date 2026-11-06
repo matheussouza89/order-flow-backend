@@ -38,7 +38,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class GatewayRoutingIT {
-    private static final WireMockServer MONOLITH = new WireMockServer(options().port(freePort()));
+    private static final WireMockServer ORDERS = new WireMockServer(options().port(freePort()));
     private static final WireMockServer SALES = new WireMockServer(options().port(freePort()));
     private static final WireMockServer PAYMENT = new WireMockServer(options().port(freePort()));
     private static final WireMockServer CATALOG = new WireMockServer(options().port(freePort()));
@@ -49,7 +49,7 @@ class GatewayRoutingIT {
             {"status":409,"message":"Only pending orders can be confirmed","errors":{}}""";
 
     static {
-        MONOLITH.start();
+        ORDERS.start();
         SALES.start();
         PAYMENT.start();
         CATALOG.start();
@@ -67,7 +67,7 @@ class GatewayRoutingIT {
 
     @DynamicPropertySource
     static void routeToTheFakeServices(DynamicPropertyRegistry registry) {
-        registry.add("MONOLITH_URL", MONOLITH::baseUrl);
+        registry.add("ORDERS_URL", ORDERS::baseUrl);
         registry.add("SALES_URL", SALES::baseUrl);
         registry.add("PAYMENT_URL", PAYMENT::baseUrl);
         registry.add("CATALOG_URL", CATALOG::baseUrl);
@@ -77,7 +77,7 @@ class GatewayRoutingIT {
 
     @AfterAll
     static void stopTheFakeServices() {
-        MONOLITH.stop();
+        ORDERS.stop();
         SALES.stop();
         PAYMENT.stop();
         CATALOG.stop();
@@ -92,7 +92,7 @@ class GatewayRoutingIT {
 
     @BeforeEach
     void resetTheFakeServices() {
-        MONOLITH.resetAll();
+        ORDERS.resetAll();
         SALES.resetAll();
         PAYMENT.resetAll();
         CATALOG.resetAll();
@@ -110,7 +110,7 @@ class GatewayRoutingIT {
 
     @Test
     void shouldForwardMethodPathBodyAndAuthorizationUntouched() throws Exception {
-        MONOLITH.stubFor(post(urlEqualTo("/orders?source=cart"))
+        ORDERS.stubFor(post(urlEqualTo("/orders?source=cart"))
                 .willReturn(aResponse().withStatus(201).withHeader("Content-Type", "application/json")
                         .withBody("{\"id\":\"42\"}")));
 
@@ -121,7 +121,7 @@ class GatewayRoutingIT {
 
         assertEquals(201, response.statusCode());
         assertEquals("{\"id\":\"42\"}", response.body());
-        MONOLITH.verify(postRequestedFor(urlEqualTo("/orders?source=cart"))
+        ORDERS.verify(postRequestedFor(urlEqualTo("/orders?source=cart"))
                 .withHeader("Authorization", equalTo(TOKEN))
                 .withHeader("Host", equalTo("localhost:" + port))
                 .withRequestBody(equalToJson("{\"items\":[]}")));
@@ -129,10 +129,11 @@ class GatewayRoutingIT {
 
     @ParameterizedTest
     @ValueSource(strings = {"/orders", "/orders/1"})
-    void shouldRouteTheOrdersStillInTheMonolithToIt(String path) throws Exception {
-        MONOLITH.stubFor(WireMock.any(urlEqualTo(path)).willReturn(aResponse().withStatus(200)));
+    void shouldRouteTheOrdersToTheOrdersService(String path) throws Exception {
+        ORDERS.stubFor(WireMock.any(urlEqualTo(path)).willReturn(aResponse().withStatus(200)));
 
         assertEquals(200, send(to(path).GET()).statusCode());
+        ORDERS.verify(anyRequestedFor(urlEqualTo(path)));
         SALES.verify(0, anyRequestedFor(anyUrl()));
         PAYMENT.verify(0, anyRequestedFor(anyUrl()));
         CATALOG.verify(0, anyRequestedFor(anyUrl()));
@@ -147,7 +148,7 @@ class GatewayRoutingIT {
 
         assertEquals(200, send(to(path).GET()).statusCode());
         IDENTITY.verify(anyRequestedFor(urlEqualTo(path)));
-        MONOLITH.verify(0, anyRequestedFor(anyUrl()));
+        ORDERS.verify(0, anyRequestedFor(anyUrl()));
     }
 
     @ParameterizedTest
@@ -157,7 +158,7 @@ class GatewayRoutingIT {
 
         assertEquals(200, send(to(path).header("Authorization", TOKEN).GET()).statusCode());
         CART.verify(anyRequestedFor(urlEqualTo(path)).withHeader("Authorization", equalTo(TOKEN)));
-        MONOLITH.verify(0, anyRequestedFor(anyUrl()));
+        ORDERS.verify(0, anyRequestedFor(anyUrl()));
     }
 
     @ParameterizedTest
@@ -167,7 +168,7 @@ class GatewayRoutingIT {
 
         assertEquals(200, send(to(path).GET()).statusCode());
         CATALOG.verify(anyRequestedFor(urlEqualTo(path)));
-        MONOLITH.verify(0, anyRequestedFor(anyUrl()));
+        ORDERS.verify(0, anyRequestedFor(anyUrl()));
     }
 
     @ParameterizedTest
@@ -177,7 +178,7 @@ class GatewayRoutingIT {
 
         assertEquals(200, send(to(path).header("Authorization", TOKEN).GET()).statusCode());
         PAYMENT.verify(anyRequestedFor(urlEqualTo(path)).withHeader("Authorization", equalTo(TOKEN)));
-        MONOLITH.verify(0, anyRequestedFor(anyUrl()));
+        ORDERS.verify(0, anyRequestedFor(anyUrl()));
     }
 
     @ParameterizedTest
@@ -187,12 +188,12 @@ class GatewayRoutingIT {
 
         assertEquals(200, send(to(path).header("Authorization", TOKEN).GET()).statusCode());
         SALES.verify(anyRequestedFor(urlEqualTo(path)).withHeader("Authorization", equalTo(TOKEN)));
-        MONOLITH.verify(0, anyRequestedFor(anyUrl()));
+        ORDERS.verify(0, anyRequestedFor(anyUrl()));
     }
 
     @Test
     void shouldPassTheServiceErrorsThroughUnchanged() throws Exception {
-        MONOLITH.stubFor(post(urlEqualTo("/orders/1/confirm"))
+        ORDERS.stubFor(post(urlEqualTo("/orders/1/confirm"))
                 .willReturn(aResponse().withStatus(409).withHeader("Content-Type", "application/json")
                         .withBody(CONFLICT)));
 
@@ -212,7 +213,7 @@ class GatewayRoutingIT {
 
         assertEquals(404, response.statusCode());
         assertThat(response.body()).contains("\"status\":404");
-        MONOLITH.verify(0, anyRequestedFor(anyUrl()));
+        ORDERS.verify(0, anyRequestedFor(anyUrl()));
         SALES.verify(0, anyRequestedFor(anyUrl()));
         PAYMENT.verify(0, anyRequestedFor(anyUrl()));
         CATALOG.verify(0, anyRequestedFor(anyUrl()));
@@ -244,7 +245,7 @@ class GatewayRoutingIT {
 
     @Test
     void shouldAnswerServiceUnavailableWhenTheServiceIsDown() throws Exception {
-        MONOLITH.stop();
+        ORDERS.stop();
 
         try {
             HttpResponse<String> response = send(to("/orders").header("Authorization", TOKEN).GET());
@@ -252,13 +253,13 @@ class GatewayRoutingIT {
             assertEquals(503, response.statusCode());
             assertThat(response.body()).contains("\"status\":503", "Service unavailable");
         } finally {
-            MONOLITH.start();
+            ORDERS.start();
         }
     }
 
     @Test
     void shouldAnswerGatewayTimeoutWhenTheServiceTakesLongerThanFourAndAHalfSeconds() throws Exception {
-        MONOLITH.stubFor(get(urlEqualTo("/orders"))
+        ORDERS.stubFor(get(urlEqualTo("/orders"))
                 .willReturn(aResponse().withStatus(200).withFixedDelay(6_000)));
 
         Instant start = Instant.now();

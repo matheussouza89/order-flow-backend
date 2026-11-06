@@ -25,7 +25,7 @@ spring:
   http:
     serviceclient:
       orders:
-        base-url: ${ORDERS_URL:http://monolith:8080}
+        base-url: ${ORDERS_URL:http://orders:8080}
         read-timeout: 10s
 
 management:

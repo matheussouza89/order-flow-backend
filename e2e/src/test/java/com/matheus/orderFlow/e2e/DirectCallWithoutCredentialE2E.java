@@ -13,8 +13,8 @@ class DirectCallWithoutCredentialE2E extends AbstractE2E {
 
     @ParameterizedTest(name = "{0} {1} {2}")
     @CsvSource({
-            "monolith, GET, /orders",
-            "monolith, GET, /internal/orders/export",
+            "orders, GET, /orders",
+            "orders, GET, /internal/orders/export",
             "sales, GET, /admin/sales/top-products",
             "payment, GET, /payments/orders/00000000-0000-0000-0000-000000000001",
             "catalog, POST, /products",
@@ -30,8 +30,8 @@ class DirectCallWithoutCredentialE2E extends AbstractE2E {
 
     @ParameterizedTest(name = "{0} {1} {2}")
     @CsvSource({
-            "monolith, GET, /orders",
-            "monolith, GET, /internal/orders/export",
+            "orders, GET, /orders",
+            "orders, GET, /internal/orders/export",
             "sales, GET, /admin/sales/top-products",
             "payment, GET, /payments/orders/00000000-0000-0000-0000-000000000001",
             "catalog, POST, /products",

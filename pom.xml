@@ -21,7 +21,7 @@
 		<module>platform/platform-test</module>
 		<module>contracts</module>
 		<module>gateway</module>
-		<module>monolith</module>
+		<module>services/orders</module>
 		<module>services/sales</module>
 		<module>services/payment</module>
 		<module>services/catalog</module>

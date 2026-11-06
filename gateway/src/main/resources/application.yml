@@ -12,8 +12,8 @@ spring:
       server:
         webmvc:
           routes:
-            - id: monolith
-              uri: ${MONOLITH_URL:http://monolith:8080}
+            - id: orders
+              uri: ${ORDERS_URL:http://orders:8080}
               predicates:
                 - Path=/orders/**
               filters:
@@ -48,10 +48,10 @@ spring:
                 - Path=/admin/sales/**
               filters:
                 - PreserveHostHeader
-            - id: monolith-docs
-              uri: ${MONOLITH_URL:http://monolith:8080}
+            - id: orders-docs
+              uri: ${ORDERS_URL:http://orders:8080}
               predicates:
-                - Path=/v3/api-docs/monolith
+                - Path=/v3/api-docs/orders
               filters:
                 - PreserveHostHeader
                 - SetPath=/v3/api-docs
@@ -102,8 +102,8 @@ management:
 springdoc:
   swagger-ui:
     urls:
-      - name: monolith
-        url: /v3/api-docs/monolith
+      - name: orders
+        url: /v3/api-docs/orders
       - name: identity
         url: /v3/api-docs/identity
       - name: cart
