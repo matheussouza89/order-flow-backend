@@ -31,18 +31,23 @@ class RefreshTokenIT extends AbstractIntegrationTest {
     private static final String EMAIL = "matheus@example.com";
     private static final String PASSWORD = "senhaSegura1";
 
+    private String userId;
+
     @BeforeEach
     void buildMockMvcWithoutDefaultToken() throws Exception {
         mockMvc = MockMvcBuilders.webAppContextSetup(context)
                 .addFilters(springSecurityFilterChain)
                 .build();
 
-        mockMvc.perform(post("/auth/register")
+        String registered = mockMvc.perform(post("/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 { "name": "Matheus", "email": "%s", "password": "%s" }
                                 """.formatted(EMAIL, PASSWORD)))
-                .andExpect(status().isCreated());
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+
+        userId = JsonPath.read(registered, "$.id");
     }
 
     private String login() throws Exception {
@@ -90,7 +95,7 @@ class RefreshTokenIT extends AbstractIntegrationTest {
 
         String accessToken = JsonPath.read(refreshed, "$.token");
 
-        mockMvc.perform(get("/orders").header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken))
+        mockMvc.perform(get("/users/{id}", userId).header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken))
                 .andExpect(status().isOk());
     }
 

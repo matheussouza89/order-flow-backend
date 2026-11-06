@@ -12,6 +12,7 @@ services:
       PAYMENT_URL: http://payment:8080
       CATALOG_URL: http://catalog:8080
       CART_URL: http://cart:8080
+      IDENTITY_URL: http://identity:8080
       ZIPKIN_ENDPOINT: http://zipkin:9411/api/v2/spans
       JAVA_TOOL_OPTIONS: -Xmx256m
     ports:
@@ -33,24 +34,24 @@ services:
         condition: service_healthy
       cart:
         condition: service_healthy
+      identity:
+        condition: service_healthy
     networks:
       - orderflow-network
 
-  monolith:
+  identity:
     build:
       context: .
       args:
-        MODULE: monolith
+        MODULE: services/identity
     restart: unless-stopped
     environment:
-      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/orderflow
-      SPRING_DATASOURCE_USERNAME: orderflow
-      SPRING_DATASOURCE_PASSWORD: orderflow
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/identity
+      SPRING_DATASOURCE_USERNAME: identity
+      SPRING_DATASOURCE_PASSWORD: identity
       SPRING_DATA_REDIS_HOST: redis
-      SPRING_DATA_REDIS_USERNAME: monolith
-      SPRING_DATA_REDIS_PASSWORD: ${REDIS_MONOLITH_PASSWORD:-monolith}
-      SPRING_RABBITMQ_HOST: rabbitmq
-      CATALOG_URL: http://catalog:8080
+      SPRING_DATA_REDIS_USERNAME: identity
+      SPRING_DATA_REDIS_PASSWORD: ${REDIS_IDENTITY_PASSWORD:-identity}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@orderflow.local}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-change-me-in-production}
       ZIPKIN_ENDPOINT: http://zipkin:9411/api/v2/spans
@@ -66,6 +67,33 @@ services:
         condition: service_healthy
       redis:
         condition: service_started
+    networks:
+      - orderflow-network
+
+  monolith:
+    build:
+      context: .
+      args:
+        MODULE: monolith
+    restart: unless-stopped
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/orderflow
+      SPRING_DATASOURCE_USERNAME: orderflow
+      SPRING_DATASOURCE_PASSWORD: orderflow
+      SPRING_RABBITMQ_HOST: rabbitmq
+      CATALOG_URL: http://catalog:8080
+      JWK_SET_URI: http://identity:8080/.well-known/jwks.json
+      ZIPKIN_ENDPOINT: http://zipkin:9411/api/v2/spans
+      JAVA_TOOL_OPTIONS: -Xmx256m
+    healthcheck:
+      test: ["CMD", "curl", "-fs", "http://localhost:8080/actuator/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 40
+      start_period: 30s
+    depends_on:
+      mysql:
+        condition: service_healthy
       rabbitmq:
         condition: service_started
     networks:
@@ -80,7 +108,7 @@ services:
     environment:
       MONGO_URI: mongodb://mongo:27017/orderflow
       SPRING_RABBITMQ_HOST: rabbitmq
-      JWK_SET_URI: http://monolith:8080/.well-known/jwks.json
+      JWK_SET_URI: http://identity:8080/.well-known/jwks.json
       ORDERS_URL: http://monolith:8080
       ZIPKIN_ENDPOINT: http://zipkin:9411/api/v2/spans
       JAVA_TOOL_OPTIONS: -Xmx256m
@@ -110,7 +138,7 @@ services:
       SPRING_DATASOURCE_PASSWORD: payment
       SPRING_RABBITMQ_HOST: rabbitmq
       PAYMENT_GATEWAY_URL: http://wiremock:8080
-      JWK_SET_URI: http://monolith:8080/.well-known/jwks.json
+      JWK_SET_URI: http://identity:8080/.well-known/jwks.json
       ZIPKIN_ENDPOINT: http://zipkin:9411/api/v2/spans
       JAVA_TOOL_OPTIONS: -Xmx256m
     healthcheck:
@@ -139,7 +167,7 @@ services:
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/catalog
       SPRING_DATASOURCE_USERNAME: catalog
       SPRING_DATASOURCE_PASSWORD: catalog
-      JWK_SET_URI: http://monolith:8080/.well-known/jwks.json
+      JWK_SET_URI: http://identity:8080/.well-known/jwks.json
       ZIPKIN_ENDPOINT: http://zipkin:9411/api/v2/spans
       JAVA_TOOL_OPTIONS: -Xmx256m
     healthcheck:
@@ -166,7 +194,7 @@ services:
       SPRING_DATA_REDIS_PASSWORD: ${REDIS_CART_PASSWORD:-cart}
       CATALOG_URL: http://catalog:8080
       ORDERS_URL: http://monolith:8080
-      JWK_SET_URI: http://monolith:8080/.well-known/jwks.json
+      JWK_SET_URI: http://identity:8080/.well-known/jwks.json
       ZIPKIN_ENDPOINT: http://zipkin:9411/api/v2/spans
       JAVA_TOOL_OPTIONS: -Xmx256m
     healthcheck:
@@ -219,7 +247,7 @@ services:
     command: [
       "redis-server",
       "--user", "default", "off",
-      "--user", "monolith", "on", ">${REDIS_MONOLITH_PASSWORD:-monolith}", "~refreshToken*", "+@all", "-@dangerous", "+info",
+      "--user", "identity", "on", ">${REDIS_IDENTITY_PASSWORD:-identity}", "~refreshToken*", "+@all", "-@dangerous", "+info",
       "--user", "cart", "on", ">${REDIS_CART_PASSWORD:-cart}", "~cart*", "+@all", "-@dangerous", "+info"
     ]
     ports:

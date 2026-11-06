@@ -17,7 +17,9 @@ class DataOwnershipE2E extends AbstractE2E {
             "payment, orderflow.orders",
             "orderflow, payment.payments",
             "catalog, orderflow.orders",
-            "orderflow, catalog.products"
+            "orderflow, catalog.products",
+            "identity, orderflow.orders",
+            "orderflow, identity.users"
     })
     void shouldDenyEachServiceTheTablesOfTheOthers(String user, String table) {
         Container.ExecResult result = runIn("mysql", "mysql", "-u" + user, "-p" + user,
@@ -30,9 +32,9 @@ class DataOwnershipE2E extends AbstractE2E {
     @ParameterizedTest(name = "{0} running {1}")
     @CsvSource({
             "cart, GET refreshToken:any",
-            "monolith, GET cart:any",
+            "identity, GET cart:any",
             "cart, FLUSHALL",
-            "monolith, FLUSHALL"
+            "identity, FLUSHALL"
     })
     void shouldDenyEachServiceTheRedisKeysOfTheOthers(String user, String command) {
         List<String> redisCli = new ArrayList<>(List.of("redis-cli", "--no-auth-warning", "--user", user, "--pass", user));
