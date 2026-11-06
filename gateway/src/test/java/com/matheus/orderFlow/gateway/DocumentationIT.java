@@ -26,14 +26,14 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class DocumentationIT {
-    private static final WireMockServer MONOLITH = new WireMockServer(options().dynamicPort());
+    private static final WireMockServer ORDERS = new WireMockServer(options().dynamicPort());
     private static final WireMockServer SALES = new WireMockServer(options().dynamicPort());
     private static final WireMockServer PAYMENT = new WireMockServer(options().dynamicPort());
     private static final WireMockServer CATALOG = new WireMockServer(options().dynamicPort());
     private static final WireMockServer CART = new WireMockServer(options().dynamicPort());
     private static final WireMockServer IDENTITY = new WireMockServer(options().dynamicPort());
-    private static final String MONOLITH_DOCS = """
-            {"openapi":"3.1.0","info":{"title":"OrderFlow API"},"paths":{"/orders":{}}}""";
+    private static final String ORDERS_DOCS = """
+            {"openapi":"3.1.0","info":{"title":"OrderFlow Orders API"},"paths":{"/orders":{}}}""";
     private static final String SALES_DOCS = """
             {"openapi":"3.1.0","info":{"title":"OrderFlow Sales API"},"paths":{"/admin/sales/daily":{}}}""";
     private static final String PAYMENT_DOCS = """
@@ -46,7 +46,7 @@ class DocumentationIT {
             {"openapi":"3.1.0","info":{"title":"OrderFlow Identity API"},"paths":{"/auth/login":{}}}""";
 
     static {
-        MONOLITH.start();
+        ORDERS.start();
         SALES.start();
         PAYMENT.start();
         CATALOG.start();
@@ -56,7 +56,7 @@ class DocumentationIT {
 
     @DynamicPropertySource
     static void routeToTheFakeServices(DynamicPropertyRegistry registry) {
-        registry.add("MONOLITH_URL", MONOLITH::baseUrl);
+        registry.add("ORDERS_URL", ORDERS::baseUrl);
         registry.add("SALES_URL", SALES::baseUrl);
         registry.add("PAYMENT_URL", PAYMENT::baseUrl);
         registry.add("CATALOG_URL", CATALOG::baseUrl);
@@ -66,7 +66,7 @@ class DocumentationIT {
 
     @AfterAll
     static void stopTheFakeServices() {
-        MONOLITH.stop();
+        ORDERS.stop();
         SALES.stop();
         PAYMENT.stop();
         CATALOG.stop();
@@ -101,7 +101,7 @@ class DocumentationIT {
         List<Map<String, String>> urls = JsonPath.read(response.body(), "$.urls");
 
         assertThat(urls).containsExactlyInAnyOrder(
-                Map.of("name", "monolith", "url", "/v3/api-docs/monolith"),
+                Map.of("name", "orders", "url", "/v3/api-docs/orders"),
                 Map.of("name", "identity", "url", "/v3/api-docs/identity"),
                 Map.of("name", "cart", "url", "/v3/api-docs/cart"),
                 Map.of("name", "catalog", "url", "/v3/api-docs/catalog"),
@@ -111,14 +111,14 @@ class DocumentationIT {
 
     @Test
     void shouldFetchEachServiceDocumentThroughTheSingleEntry() throws Exception {
-        serveDocs(MONOLITH, MONOLITH_DOCS);
+        serveDocs(ORDERS, ORDERS_DOCS);
         serveDocs(SALES, SALES_DOCS);
         serveDocs(PAYMENT, PAYMENT_DOCS);
         serveDocs(CATALOG, CATALOG_DOCS);
         serveDocs(CART, CART_DOCS);
         serveDocs(IDENTITY, IDENTITY_DOCS);
 
-        assertEquals(MONOLITH_DOCS, fetch("/v3/api-docs/monolith").body());
+        assertEquals(ORDERS_DOCS, fetch("/v3/api-docs/orders").body());
         assertEquals(SALES_DOCS, fetch("/v3/api-docs/sales").body());
         assertEquals(PAYMENT_DOCS, fetch("/v3/api-docs/payment").body());
         assertEquals(CATALOG_DOCS, fetch("/v3/api-docs/catalog").body());

@@ -16,6 +16,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.List;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -24,13 +25,14 @@ public abstract class AbstractE2E {
     private static final String ADMIN_EMAIL = "admin@orderflow.local";
     private static final String ADMIN_PASSWORD = "change-me-in-production";
     protected static final String CUSTOMER_PASSWORD = "senhaSegura1";
+    protected static final String TOP_PRODUCTS = "/admin/sales/top-products?limit=100";
     private static final int HTTP_PORT = 8080;
 
     private static final ComposeContainer COMPOSE = new ComposeContainer(new File("../docker-compose.yml"))
             .withBuild(true)
             .withRemoveVolumes(true)
             .withExposedService("gateway", HTTP_PORT, healthy())
-            .withExposedService("monolith", HTTP_PORT, healthy())
+            .withExposedService("orders", HTTP_PORT, healthy())
             .withExposedService("sales", HTTP_PORT, healthy())
             .withExposedService("payment", HTTP_PORT, healthy())
             .withExposedService("catalog", HTTP_PORT, healthy())
@@ -160,5 +162,42 @@ public abstract class AbstractE2E {
         assertEquals(201, created.statusCode(), created.body());
 
         return read(created, "$.id");
+    }
+
+    protected static String placeOrder(Customer customer, String productId, int quantity) {
+        HttpResponse<String> created = post("/orders", customer.bearer(), """
+                { "items": [ { "productId": "%s", "quantity": %d } ] }
+                """.formatted(productId, quantity));
+        assertEquals(201, created.statusCode(), created.body());
+
+        return read(created, "$.id");
+    }
+
+    protected static HttpResponse<String> awaitApproval(Customer customer, String orderId) {
+        return Awaitility.await()
+                .atMost(Duration.ofSeconds(60))
+                .ignoreExceptions()
+                .until(() -> get("/payments/orders/" + orderId, customer.bearer()),
+                        response -> response.statusCode() == 200 && "APPROVED".equals(read(response, "$.status")));
+    }
+
+    protected static int chargesFor(String orderId) {
+        HttpResponse<String> count = send(HttpRequest.newBuilder(service("wiremock", "/__admin/requests/count"))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString("""
+                        { "method": "POST", "url": "/charges",
+                          "headers": { "Idempotency-Key": { "equalTo": "order-%s" } } }
+                        """.formatted(orderId))));
+        assertEquals(200, count.statusCode(), count.body());
+
+        return read(count, "$.count");
+    }
+
+    protected static long quantitySold(String admin, String product) {
+        HttpResponse<String> ranking = get(TOP_PRODUCTS, admin);
+        assertEquals(200, ranking.statusCode(), ranking.body());
+
+        List<Integer> quantities = read(ranking, "$[?(@.productName == '" + product + "')].quantity");
+        return quantities.isEmpty() ? 0 : quantities.getFirst();
     }
 }

@@ -1,11 +1,8 @@
 package com.matheus.orderFlow.e2e;
 
-import org.awaitility.Awaitility;
 import org.junit.jupiter.api.Test;
 
-import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.time.Duration;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -45,32 +42,6 @@ class PaymentIsolationE2E extends AbstractE2E {
     }
 
     private static String order(Customer customer, String price, int quantity) {
-        String productId = createProduct(adminBearer(), "Produto-" + UUID.randomUUID(), price);
-        HttpResponse<String> created = post("/orders", customer.bearer(), """
-                { "items": [ { "productId": "%s", "quantity": %d } ] }
-                """.formatted(productId, quantity));
-        assertEquals(201, created.statusCode(), created.body());
-
-        return read(created, "$.id");
-    }
-
-    private static HttpResponse<String> awaitApproval(Customer customer, String orderId) {
-        return Awaitility.await()
-                .atMost(Duration.ofSeconds(60))
-                .ignoreExceptions()
-                .until(() -> get("/payments/orders/" + orderId, customer.bearer()),
-                        response -> response.statusCode() == 200 && "APPROVED".equals(read(response, "$.status")));
-    }
-
-    private static int chargesFor(String orderId) {
-        HttpResponse<String> count = send(HttpRequest.newBuilder(service("wiremock", "/__admin/requests/count"))
-                .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString("""
-                        { "method": "POST", "url": "/charges",
-                          "headers": { "Idempotency-Key": { "equalTo": "order-%s" } } }
-                        """.formatted(orderId))));
-        assertEquals(200, count.statusCode(), count.body());
-
-        return read(count, "$.count");
+        return placeOrder(customer, createProduct(adminBearer(), "Produto-" + UUID.randomUUID(), price), quantity);
     }
 }

@@ -44,7 +44,7 @@ class CheckoutE2E extends AbstractE2E {
         Customer customer = customerWithCart(3);
         String cart = get("/cart", customer.bearer()).body();
 
-        stop("monolith");
+        stop("orders");
         try {
             Instant start = Instant.now();
             HttpResponse<String> checkout = post("/cart/checkout", customer.bearer(), "");
@@ -56,7 +56,7 @@ class CheckoutE2E extends AbstractE2E {
             assertThat(elapsed).isLessThan(Duration.ofSeconds(5));
             assertEquals(cart, get("/cart", customer.bearer()).body());
         } finally {
-            start("monolith");
+            start("orders");
         }
 
         HttpResponse<String> retried = Awaitility.await()

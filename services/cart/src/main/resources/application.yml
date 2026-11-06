@@ -20,7 +20,7 @@ spring:
         connect-timeout: 1500ms
         read-timeout: 1500ms
       orders:
-        base-url: ${ORDERS_URL:http://monolith:8080}
+        base-url: ${ORDERS_URL:http://orders:8080}
         connect-timeout: 1500ms
         read-timeout: 3500ms
 

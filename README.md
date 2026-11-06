@@ -12,7 +12,7 @@ resiliência, com autenticação por JWT, rotas protegidas por papel e recursos
 vinculados ao usuário do token (ver [Roadmap](#roadmap)).
 
 Está em andamento a separação em microsserviços, especificada em
-[specs/003-microsservicos](specs/003-microsservicos/spec.md). Seis etapas estão
+[specs/003-microsservicos](specs/003-microsservicos/spec.md). As sete etapas estão
 prontas. Na primeira, o cliente passou a entrar por um gateway, a credencial
 ficou verificável por qualquer serviço sem que ele consiga emiti-la, e o rastro
 de uma requisição atravessa serviços e mensagens. Na segunda, os relatórios de
@@ -23,8 +23,8 @@ pedido passaram a consultá-lo pela rede, com prazo e circuit breaker. Na quinta
 o carrinho saiu também, e a finalização passou a atravessar dois serviços com
 prazo próprio e uma chave que impede o pedido duplicado. Na sexta, a identidade
 saiu: cadastro, login e emissão de credenciais ficam num serviço só, e o
-monólito, como os outros, apenas verifica. O resto ainda roda num monólito atrás
-do gateway, que perde uma capacidade por etapa.
+monólito, como os outros, apenas verifica. Na sétima, o que restava do monólito
+virou o serviço de pedidos, e o sistema único deixou de existir.
 
 ---
 
@@ -53,17 +53,16 @@ do gateway, que perde uma capacidade por etapa.
 
 **Pré-requisito:** Docker.
 
-Suba o projeto inteiro — gateway, monólito, serviços de identidade, catálogo,
-carrinho, pagamentos e vendas, MySQL, MongoDB, Redis, RabbitMQ, WireMock e
+Suba o projeto inteiro — gateway, serviços de identidade, catálogo, carrinho,
+pedidos, pagamentos e vendas, MySQL, MongoDB, Redis, RabbitMQ, WireMock e
 Zipkin:
 
 ```bash
 docker compose up --build
 ```
 
-Só o gateway publica a porta 8080. O monólito e os serviços ficam na rede
-interna, e uma chamada direta a eles sem credencial é recusada como qualquer
-outra.
+Só o gateway publica a porta 8080. Os serviços ficam na rede interna, e uma
+chamada direta a eles sem credencial é recusada como qualquer outra.
 
 Um único Dockerfile constrói qualquer módulo, escolhido pelo argumento `MODULE`.
 O primeiro estágio compila com Maven só o módulo e as bibliotecas de que ele
@@ -94,7 +93,8 @@ docker compose exec -T mysql mysql -uroot -proot < docker/mysql/init/01-schemas.
 Num volume com dados de antes da separação, cada etapa que tira uma tabela do
 monólito tem um script em `docker/mysql/migrations/`, que roda **antes da
 primeira subida do serviço dono**: `us3-payments.sql` antes do `payment`,
-`us4-products.sql` antes do `catalog` e `us6-users.sql` antes do `identity`.
+`us4-products.sql` antes do `catalog`, `us6-users.sql` antes do `identity` e
+`us7-orders.sql` antes do `orders`.
 
 ```bash
 docker compose up -d mysql
@@ -112,13 +112,17 @@ docker compose exec -T mysql mysql -uroot -proot < docker/mysql/migrations/us4-p
 docker compose exec -T mysql mysql -uroot -proot < docker/mysql/migrations/us6-users.sql
 ```
 
+```bash
+docker compose exec -T mysql mysql -uroot -proot < docker/mysql/migrations/us7-orders.sql
+```
+
 Se o serviço subir antes, ele cria a tabela vazia no próprio schema e o script é
 recusado, sem mexer em nenhuma linha: com a tabela nova ainda vazia, apague-a e
 rode o script de novo. Volume novo não precisa de nada.
 
-Para desenvolver com o monólito fora do container (Java 21 necessário), suba
-só a infraestrutura e rode os módulos pelo Maven. O monólito atende direto na
-porta 8080 e não precisa do MongoDB, que agora é só do serviço de vendas. A
+Para desenvolver com os serviços fora do container (Java 21 necessário), suba
+só a infraestrutura e rode os módulos pelo Maven. O serviço de pedidos atende
+direto na porta 8080 e não precisa do MongoDB, que é só do serviço de vendas. A
 identidade sobe na porta 8083: é ela que emite o token, e os outros validam pelas
 chaves dela. O pedido consulta o catálogo, na 8081. O carrinho, na 8082, só é
 preciso para a finalização. O Redis do Compose não aceita o usuário padrão, então
@@ -133,7 +137,7 @@ SPRING_DATA_REDIS_USERNAME=identity SPRING_DATA_REDIS_PASSWORD=identity ./mvnw -
 ```
 
 ```bash
-JWK_SET_URI=http://localhost:8083/.well-known/jwks.json CATALOG_URL=http://localhost:8081 ./mvnw -pl monolith spring-boot:run
+JWK_SET_URI=http://localhost:8083/.well-known/jwks.json CATALOG_URL=http://localhost:8081 ./mvnw -pl services/orders spring-boot:run
 ```
 
 ```bash
@@ -168,7 +172,7 @@ Roda os **268 testes unitários** em poucos segundos, sem Docker.
 ./mvnw verify
 ```
 
-Roda os unitários **mais os 215 de integração**, que sobem MySQL, MongoDB, Redis e
+Roda os unitários **mais os 217 de integração**, que sobem MySQL, MongoDB, Redis e
 RabbitMQ reais via Testcontainers, e um WireMock fazendo as vezes do gateway de
 pagamento, do catálogo, do serviço de pedidos, do serviço atrás da entrada única
 ou da exportação de pedidos.
@@ -177,21 +181,23 @@ ou da exportação de pedidos.
 ./mvnw verify -Pe2e -pl e2e -am
 ```
 
-Roda os **45 testes ponta a ponta**, que constroem as imagens, sobem o Compose
+Roda os **47 testes ponta a ponta**, que constroem as imagens, sobem o Compose
 inteiro pelo Testcontainers e falam com o sistema pela porta 8080, como um
 cliente. São eles que provam o que só aparece com os serviços juntos: todas as
 rotas respondendo pela entrada única, a chamada direta sem credencial recusada,
 a documentação única cobrindo todas as rotas, os pedidos confirmados com os
 serviços de vendas e de pagamentos parados, a cobrança feita uma vez só quando
-o serviço volta, a finalização recusada no prazo com o catálogo ou o monólito
-parados, um pedido só quando ela é repetida, a credencial aceita com a
-identidade parada, o refresh token de antes da extração renovado sem senha, e
-cada usuário do MySQL e do Redis sem acesso aos dados dos outros. Usam as
+o serviço volta, a finalização recusada no prazo com o catálogo ou o serviço de
+pedidos parados, um pedido só quando ela é repetida, a credencial aceita com a
+identidade parada, o refresh token de antes da extração renovado sem senha, a
+compra inteira do cadastro ao relatório, os fatos do pedido entregues uma vez aos
+serviços que estavam parados, e cada usuário do MySQL e do Redis sem acesso aos
+dados dos outros. Usam as
 mesmas portas do Compose, então a pilha de desenvolvimento precisa estar parada.
 
 | Módulo | Unitários | Integração | Ponta a ponta |
 |---|---|---|---|
-| `monolith` | 52 | 64 | — |
+| `orders` | 52 | 66 | — |
 | `identity` | 79 | 47 | — |
 | `catalog` | 43 | 19 | — |
 | `cart` | 15 | 22 | — |
@@ -204,13 +210,13 @@ mesmas portas do Compose, então a pilha de desenvolvimento precisa estar parada
 | `platform-security` | 6 | — | — |
 | `platform-messaging` | 5 | — | — |
 | `platform-test` | 2 | — | — |
-| `e2e` | — | — | 45 |
+| `e2e` | — | — | 47 |
 
 A separação é feita por convenção de nome: o Surefire pega só `*Test.java`, o
-Failsafe pega `*IT.java`. O teste que sobe o contexto inteiro se chama
-`OrderFlowApplicationIT` porque precisa dos containers. Com o nome antigo,
-`OrderFlowApplicationTests`, ele rodava no Surefire, que por padrão aceita
-`*Tests`, e o `./mvnw test` deixava de rodar sem Docker.
+Failsafe pega `*IT.java`. O teste que sobe o contexto inteiro do serviço de
+pedidos se chama `OrdersApplicationIT` porque precisa dos containers. Com o
+sufixo antigo, `Tests`, ele rodava no Surefire, que por padrão aceita `*Tests`, e
+o `./mvnw test` deixava de rodar sem Docker.
 
 ---
 
@@ -267,9 +273,9 @@ roda com `-Xmx256m`.
 com.matheus.orderFlow/
 ├── user/             contas e credenciais, hoje no serviço próprio (services/identity)
 ├── product/          catálogo, hoje no serviço próprio (services/catalog)
-├── catalog/          cliente do catálogo usado pelo pedido
+├── catalog/          cliente do catálogo usado pelo pedido, no mesmo serviço
 ├── cart/             carrinho, hoje no serviço próprio (services/cart)
-├── order/            Order, OrderItem, OrderStatus, OrderService, OrderController, DTOs
+├── order/            pedido e ciclo de vida, hoje no serviço próprio (services/orders)
 ├── payment/          cobrança, hoje no serviço próprio (services/payment)
 ├── sales/            relatórios de vendas, hoje no serviço próprio (services/sales)
 └── shared/
@@ -959,16 +965,17 @@ container, acrescentado na separação em serviços, foi o que mostrou.
 
 ### Separação em microsserviços, uma capacidade por vez
 
-O monólito está sendo separado em serviços, um por capacidade: identidade,
-catálogo, carrinho, pedidos, pagamentos, relatórios de vendas e notificações. A
+O monólito foi separado em serviços, um por capacidade: identidade, catálogo,
+carrinho, pedidos, pagamentos e relatórios de vendas; as notificações, da spec
+002, vão nascer como serviço. A
 motivação é aprender e demonstrar arquitetura distribuída, não escala: as
 fronteiras já existiam no código, e agregados já se referenciavam por `UUID`. A
 alternativa mais forte, um monólito modular, custa muito menos e fica registrada
 como a decisão a revisitar se manter vários serviços travar a evolução. Decisões
 e alternativas estão em [research.md](specs/003-microsservicos/research.md).
 
-A migração é incremental: a cada etapa, um pacote sai do monólito e o sistema
-continua funcionando por inteiro. O cliente não percebe a mudança, porque entra
+A migração foi incremental: a cada etapa, um pacote saiu do monólito e o sistema
+continuou funcionando por inteiro. O cliente não percebeu a mudança, porque entra
 sempre pelo mesmo endereço.
 
 ### Módulos, e o que pode ser compartilhado
@@ -1117,9 +1124,9 @@ o MySQL com o script de schemas do Compose, preenche a tabela antiga, roda o
 script de movimentação como root e sobe o Flyway e o Hibernate do serviço com o
 usuário `payment`.
 
-O monólito mantém as migrações antigas de `payments`, porque o Flyway valida o
-histórico já aplicado. Num ambiente novo, ele ainda cria `orderflow.payments`,
-vazia e sem uso.
+O monólito manteve as migrações antigas de `payments`, porque o Flyway valida o
+histórico já aplicado. Num ambiente novo, ele ainda criava `orderflow.payments`,
+vazia e sem uso, até a última etapa.
 
 ### Catálogo, a primeira chamada síncrona
 
@@ -1253,6 +1260,40 @@ O `SecurityIT` do monólito foi dividido. O que é de conta, como cadastro, logi
 adulterado e de outra chave nas próprias rotas. O que é de pedido ficou, com as
 mesmas recusas nas rotas de pedido. Os testes do monólito passaram a assinar com
 a chave do `platform-test`, como os dos outros serviços.
+
+### Pedidos, o fim do monólito
+
+O que restava do monólito, o pedido com o cliente do catálogo e o outbox, virou o
+serviço `orders`. Foi a última etapa porque todo mundo dependia do pedido: o
+carrinho o cria, pagamentos e vendas escutam os fatos dele. Cada etapa anterior
+trocou uma dessas dependências internas por uma chamada pela rede ou por um fato,
+até sobrar só o pedido. A mudança foi de nome, não de código: o módulo foi movido
+para `services/orders`, a classe de aplicação virou `OrdersApplication`, e o
+nome da aplicação, que identifica o serviço no Zipkin, virou `orders`. A entrada
+única troca o destino de `/orders/**`, e o cliente não percebe.
+
+As três tabelas mudam de schema num único `RENAME TABLE`, que é atômico. A
+chave estrangeira dos itens acompanha o pedido, e o outbox vai junto porque uma
+mensagem ainda não publicada é um fato que o novo serviço precisa entregar. O
+teste de integração deixa mensagens pendentes na tabela antiga e confere que
+elas chegam ao schema novo.
+
+As nove migrações do monólito deram lugar a uma `V1` com a forma de hoje, como nos
+outros serviços. O histórico antigo fica em `orderflow.flyway_schema_history`, que
+o serviço não lê, porque o schema dele é outro. O usuário `orderflow` do MySQL
+deixou de ser criado, no script de schemas e no Compose, e o health check do
+MySQL passou a usar o root. Num volume antigo ele continua existindo, sem nada
+para ler além do histórico; `DROP USER 'orderflow'@'%'` o remove.
+
+Dois testes ponta a ponta fecham a migração. O primeiro faz a compra inteira pela
+porta 8080, do cadastro ao relatório de vendas, sem nenhum monólito no Compose.
+O segundo para pagamentos e vendas juntos enquanto um pedido é confirmado,
+enviado e entregue e outro é confirmado e cancelado. Quando os dois voltam, cada
+um recebe todos os fatos uma vez só: uma cobrança por confirmação, a quantidade
+do pedido entregue contada uma vez, e o cancelado fora dos relatórios. Os
+relatórios não mostram status, então o teste lê a projeção no MongoDB para saber
+que o último fato chegou. As notificações, da spec 002, ainda não existem; quando
+chegarem, entram nos dois cenários.
 
 ## Endpoints
 
@@ -1393,7 +1434,7 @@ mesma versão não contam.
 - [x] Fila de espera e DLQ para status que chega antes da confirmação
 - [x] Reconstrução da projeção pela exportação do serviço de pedidos
 - [x] Relatórios administrativos de vendas por dia e por produto
-- [x] 528 testes, separados por velocidade (unitários, integração e ponta a ponta)
+- [x] 532 testes, separados por velocidade (unitários, integração e ponta a ponta)
 - [x] Separação em serviços, etapa 1: entrada única, credencial RS256 com JWKS,
   fatos com tipo versionado, rastreamento com Zipkin e linha de base de carga
 - [x] Separação em serviços, etapa 2: relatórios de vendas como serviço próprio,
@@ -1406,6 +1447,8 @@ mesma versão não contam.
   finalização, chave de idempotência no pedido e um usuário do Redis por serviço
 - [x] Separação em serviços, etapa 6: identidade como serviço próprio, única
   emissora de credenciais, com os refresh tokens de antes renovando sem senha
+- [x] Separação em serviços, etapa 7: pedidos como serviço próprio, com o outbox
+  movido junto; o monólito deixa de existir
 - [x] Pipeline de CI rodando `mvn verify` a cada push
 - [x] Imagem da aplicação e stack completa em Docker, com conexões por variável de ambiente
 - [x] Documentação OpenAPI
