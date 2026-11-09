@@ -84,7 +84,14 @@ o projeto já dá acesso às rotas de `ADMIN`.
 
 Cada serviço tem schema e usuário próprios no MySQL, criados por
 `docker/mysql/init/01-schemas.sql` na primeira subida do volume. Um volume que
-já existia antes da separação não roda esse script de novo; aplique uma vez:
+já existia antes da separação não roda esse script de novo. Nesse caso, suba só
+o MySQL e aplique o script uma vez, antes dos serviços: sem o próprio usuário
+eles ficam reiniciando, e no instante em que o usuário passa a existir criam as
+tabelas vazias, antes da movimentação abaixo.
+
+```bash
+docker compose up -d mysql
+```
 
 ```bash
 docker compose exec -T mysql mysql -uroot -proot < docker/mysql/init/01-schemas.sql
@@ -97,10 +104,6 @@ primeira subida do serviço dono**: `us3-payments.sql` antes do `payment`,
 `us7-orders.sql` antes do `orders`.
 
 ```bash
-docker compose up -d mysql
-```
-
-```bash
 docker compose exec -T mysql mysql -uroot -proot < docker/mysql/migrations/us3-payments.sql
 ```
 
@@ -110,6 +113,27 @@ docker compose exec -T mysql mysql -uroot -proot < docker/mysql/migrations/us4-p
 
 ```bash
 docker compose exec -T mysql mysql -uroot -proot < docker/mysql/migrations/us6-users.sql
+```
+
+Os scripts só mudam a tabela de schema, sem mexer na forma dela, e supõem que o
+monólito aplicou todas as migrações dele, até a V9, criada na etapa 5. Um volume
+que pula do monólito de antes da separação direto para cá chega ao `orders` sem
+a chave de idempotência ou sem o `traceparent` do outbox. A `V1` do serviço não
+acrescenta coluna a uma tabela que já existe, e o Hibernate recusa a subida.
+Antes do `us7-orders.sql`, confira a última migração do monólito:
+
+```bash
+docker compose exec -T mysql mysql -uroot -proot -e "SELECT MAX(version) FROM orderflow.flyway_schema_history"
+```
+
+Abaixo de 8, aplique a V8; abaixo de 9, a V9:
+
+```bash
+docker compose exec -T mysql mysql -uroot -proot -e "ALTER TABLE orderflow.outbox_messages ADD COLUMN traceparent VARCHAR(55) NULL"
+```
+
+```bash
+docker compose exec -T mysql mysql -uroot -proot -e "ALTER TABLE orderflow.orders ADD COLUMN idempotency_key VARCHAR(64) NULL; ALTER TABLE orderflow.orders ADD CONSTRAINT uk_orders_user_idempotency_key UNIQUE (user_id, idempotency_key)"
 ```
 
 ```bash
