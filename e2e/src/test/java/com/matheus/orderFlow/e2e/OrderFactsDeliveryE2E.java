@@ -12,8 +12,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 class OrderFactsDeliveryE2E extends AbstractE2E {
 
     private static String statusInTheSalesView(String orderId) {
-        Container.ExecResult result = runIn("mongo", "mongosh", "--quiet", "orderflow",
-                "--eval", "db.order_views.findOne({ _id: '%s' })?.status".formatted(orderId));
+        Container.ExecResult result = inTheSalesDatabase("db.order_views.findOne({ _id: '%s' })?.status".formatted(orderId));
         assertEquals(0, result.getExitCode(), result.getStderr());
 
         return result.getStdout().strip();

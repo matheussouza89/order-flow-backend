@@ -20,13 +20,6 @@ public final class OrderFacts {
             CANCELLED_V1, OrderCancelledEvent.class
     );
 
-    public static final Map<String, Class<?>> LEGACY_TYPES = Map.of(
-            "com.matheus.orderFlow.order.OrderConfirmedEvent", OrderConfirmedEvent.class,
-            "com.matheus.orderFlow.order.OrderShippedEvent", OrderShippedEvent.class,
-            "com.matheus.orderFlow.order.OrderDeliveredEvent", OrderDeliveredEvent.class,
-            "com.matheus.orderFlow.order.OrderCancelledEvent", OrderCancelledEvent.class
-    );
-
     private OrderFacts() {
     }
 }

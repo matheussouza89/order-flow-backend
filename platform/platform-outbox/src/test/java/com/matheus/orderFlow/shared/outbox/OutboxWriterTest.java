@@ -51,7 +51,7 @@ class OutboxWriterTest {
     @BeforeEach
     void setUp() {
         outboxWriter = new OutboxWriter(outboxRepository, JsonMapper.builder().build(),
-                new FactTypes(Map.of("sample.happened.v1", SampleHappened.class), Map.of()),
+                new FactTypes(Map.of("sample.happened.v1", SampleHappened.class)),
                 tracer, propagator);
     }
 

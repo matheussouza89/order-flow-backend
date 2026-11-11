@@ -10,9 +10,11 @@ própria fila. Decisões em [research.md](../research.md), R9 e R10.
 | `__TypeId__` | id lógico do tipo, com versão do formato (`order.confirmed.v1`) |
 | `traceparent` | contexto do rastro, formato W3C (FR-016) |
 
-Durante a transição, o consumidor aceita também os nomes de classe antigos no
+Durante a transição, o consumidor aceitava também os nomes de classe antigos no
 `__TypeId__` (`com.matheus.orderFlow.order.OrderConfirmedEvent` e os demais), para
-não perder mensagens que já estavam na fila.
+não perder mensagens que já estavam na fila. No fim da migração, com nenhuma fila,
+DLQ ou outbox guardando mensagem nesse formato, eles foram removidos, e só o id
+lógico é aceito.
 
 ## Fatos de pedido
 

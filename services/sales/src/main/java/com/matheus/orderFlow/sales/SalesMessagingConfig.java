@@ -19,13 +19,14 @@ class SalesMessagingConfig {
     static final String PROJECTION_QUEUE = "order.views.projection";
     static final String WAIT_EXCHANGE = "orderflow.views.wait";
     static final String WAIT_QUEUE = "order.views.projection.wait";
+    static final String RETURN_EXCHANGE = "orderflow.views.return";
     static final String DEFERRALS_HEADER = "projection-deferrals";
     static final int DEFERRAL_MILLIS = 10_000;
     static final int MAX_DEFERRALS = 9;
 
     @Bean
     FactTypes factTypes() {
-        return new FactTypes(OrderFacts.TYPES, OrderFacts.LEGACY_TYPES);
+        return new FactTypes(OrderFacts.TYPES);
     }
 
     @Bean
@@ -54,13 +55,23 @@ class SalesMessagingConfig {
     Queue orderViewsWaitQueue() {
         return QueueBuilder.durable(WAIT_QUEUE)
                 .ttl(DEFERRAL_MILLIS)
-                .deadLetterExchange(RabbitMqConfig.EXCHANGE)
+                .deadLetterExchange(RETURN_EXCHANGE)
                 .build();
     }
 
     @Bean
     Binding orderViewsWaitBinding(Queue orderViewsWaitQueue, FanoutExchange orderViewsWaitExchange) {
         return BindingBuilder.bind(orderViewsWaitQueue).to(orderViewsWaitExchange);
+    }
+
+    @Bean
+    FanoutExchange orderViewsReturnExchange() {
+        return new FanoutExchange(RETURN_EXCHANGE);
+    }
+
+    @Bean
+    Binding orderViewsReturnBinding(Queue orderViewsProjectionQueue, FanoutExchange orderViewsReturnExchange) {
+        return BindingBuilder.bind(orderViewsProjectionQueue).to(orderViewsReturnExchange);
     }
 
     private Binding bind(Queue queue, TopicExchange exchange, String routingKey) {

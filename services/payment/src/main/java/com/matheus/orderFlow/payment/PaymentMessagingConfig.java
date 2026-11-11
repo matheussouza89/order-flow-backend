@@ -17,7 +17,7 @@ class PaymentMessagingConfig {
 
     @Bean
     FactTypes factTypes() {
-        return new FactTypes(OrderFacts.TYPES, OrderFacts.LEGACY_TYPES);
+        return new FactTypes(OrderFacts.TYPES);
     }
 
     @Bean

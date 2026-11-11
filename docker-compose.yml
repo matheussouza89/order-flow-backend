@@ -81,6 +81,8 @@ services:
       SPRING_DATASOURCE_USERNAME: orders
       SPRING_DATASOURCE_PASSWORD: orders
       SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_USERNAME: orders
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_ORDERS_PASSWORD:-orders}
       CATALOG_URL: http://catalog:8080
       JWK_SET_URI: http://identity:8080/.well-known/jwks.json
       ZIPKIN_ENDPOINT: http://zipkin:9411/api/v2/spans
@@ -94,8 +96,8 @@ services:
     depends_on:
       mysql:
         condition: service_healthy
-      rabbitmq:
-        condition: service_started
+      rabbitmq-users:
+        condition: service_completed_successfully
     networks:
       - orderflow-network
 
@@ -106,8 +108,10 @@ services:
         MODULE: services/sales
     restart: unless-stopped
     environment:
-      MONGO_URI: mongodb://mongo:27017/orderflow
+      MONGO_URI: mongodb://sales:${MONGO_SALES_PASSWORD:-sales}@mongo:27017/orderflow
       SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_USERNAME: sales
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_SALES_PASSWORD:-sales}
       JWK_SET_URI: http://identity:8080/.well-known/jwks.json
       ORDERS_URL: http://orders:8080
       ZIPKIN_ENDPOINT: http://zipkin:9411/api/v2/spans
@@ -119,8 +123,8 @@ services:
       retries: 40
       start_period: 30s
     depends_on:
-      rabbitmq:
-        condition: service_started
+      rabbitmq-users:
+        condition: service_completed_successfully
       mongo:
         condition: service_started
     networks:
@@ -137,6 +141,8 @@ services:
       SPRING_DATASOURCE_USERNAME: payment
       SPRING_DATASOURCE_PASSWORD: payment
       SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_USERNAME: payment
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PAYMENT_PASSWORD:-payment}
       PAYMENT_GATEWAY_URL: http://wiremock:8080
       JWK_SET_URI: http://identity:8080/.well-known/jwks.json
       ZIPKIN_ENDPOINT: http://zipkin:9411/api/v2/spans
@@ -150,8 +156,8 @@ services:
     depends_on:
       mysql:
         condition: service_healthy
-      rabbitmq:
-        condition: service_started
+      rabbitmq-users:
+        condition: service_completed_successfully
       wiremock:
         condition: service_started
     networks:
@@ -258,10 +264,15 @@ services:
   mongo:
     image: mongo:7
     restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:-root}
+      MONGO_SALES_PASSWORD: ${MONGO_SALES_PASSWORD:-sales}
     ports:
       - "27017:27017"
     volumes:
       - mongo_data:/data/db
+      - ./docker/mongo/init:/docker-entrypoint-initdb.d:ro
     networks:
       - orderflow-network
 
@@ -284,6 +295,23 @@ services:
       - "15672:15672"
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - orderflow-network
+
+  rabbitmq-users:
+    image: curlimages/curl:8.11.1
+    entrypoint: ["sh", "/users.sh"]
+    environment:
+      RABBITMQ_ADMIN_USER: orderflow
+      RABBITMQ_ADMIN_PASSWORD: orderflow
+      RABBITMQ_ORDERS_PASSWORD: ${RABBITMQ_ORDERS_PASSWORD:-orders}
+      RABBITMQ_PAYMENT_PASSWORD: ${RABBITMQ_PAYMENT_PASSWORD:-payment}
+      RABBITMQ_SALES_PASSWORD: ${RABBITMQ_SALES_PASSWORD:-sales}
+    volumes:
+      - ./docker/rabbitmq/users.sh:/users.sh:ro
+    depends_on:
+      rabbitmq:
+        condition: service_started
     networks:
       - orderflow-network
 

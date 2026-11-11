@@ -27,6 +27,8 @@ public abstract class AbstractE2E {
     protected static final String CUSTOMER_PASSWORD = "senhaSegura1";
     protected static final String TOP_PRODUCTS = "/admin/sales/top-products?limit=100";
     private static final int HTTP_PORT = 8080;
+    protected static final int AMQP_PORT = 5672;
+    protected static final int ZIPKIN_PORT = 9411;
 
     private static final ComposeContainer COMPOSE = new ComposeContainer(new File("../docker-compose.yml"))
             .withBuild(true)
@@ -38,7 +40,9 @@ public abstract class AbstractE2E {
             .withExposedService("catalog", HTTP_PORT, healthy())
             .withExposedService("cart", HTTP_PORT, healthy())
             .withExposedService("identity", HTTP_PORT, healthy())
-            .withExposedService("wiremock", HTTP_PORT);
+            .withExposedService("wiremock", HTTP_PORT)
+            .withExposedService("rabbitmq", AMQP_PORT)
+            .withExposedService("zipkin", ZIPKIN_PORT);
 
     private static final HttpClient HTTP = HttpClient.newHttpClient();
 
@@ -92,6 +96,19 @@ public abstract class AbstractE2E {
     protected static URI service(String name, String path) {
         return URI.create("http://" + COMPOSE.getServiceHost(name, HTTP_PORT) + ":"
                 + COMPOSE.getServicePort(name, HTTP_PORT) + path);
+    }
+
+    protected static String hostOf(String service, int port) {
+        return COMPOSE.getServiceHost(service, port);
+    }
+
+    protected static int portOf(String service, int port) {
+        return COMPOSE.getServicePort(service, port);
+    }
+
+    protected static Container.ExecResult inTheSalesDatabase(String script) {
+        return runIn("mongo", "mongosh", "--quiet", "--username", "sales", "--password", "sales",
+                "--authenticationDatabase", "orderflow", "orderflow", "--eval", script);
     }
 
     protected static HttpResponse<String> send(HttpRequest.Builder request) {
