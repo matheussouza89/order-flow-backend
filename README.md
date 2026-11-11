@@ -11,9 +11,9 @@ incluindo o ciclo de vida do pedido e a cobrança assíncrona com política de
 resiliência, com autenticação por JWT, rotas protegidas por papel e recursos
 vinculados ao usuário do token (ver [Roadmap](#roadmap)).
 
-Está em andamento a separação em microsserviços, especificada em
-[specs/003-microsservicos](specs/003-microsservicos/spec.md). As sete etapas estão
-prontas. Na primeira, o cliente passou a entrar por um gateway, a credencial
+A aplicação foi separada em microsserviços, como especificado em
+[specs/003-microsservicos](specs/003-microsservicos/spec.md), em sete etapas. Na
+primeira, o cliente passou a entrar por um gateway, a credencial
 ficou verificável por qualquer serviço sem que ele consiga emiti-la, e o rastro
 de uma requisição atravessa serviços e mensagens. Na segunda, os relatórios de
 vendas viraram o primeiro serviço próprio, alimentado só pelos fatos dos
@@ -49,6 +49,63 @@ virou o serviço de pedidos, e o sistema único deixou de existir.
 
 ---
 
+## Arquitetura
+
+O cliente fala só com o gateway, na porta 8080. Atrás dele, cada capacidade é um
+serviço com os próprios dados:
+
+```
+cliente ──► gateway :8080 ──┬──► identity   emite o token; os outros validam pelas chaves públicas
+                            ├──► catalog    vitrine e produtos
+                            ├──► cart ──────► catalog e orders, na finalização
+                            ├──► orders ────► catalog, ao criar o pedido
+                            ├──► payment
+                            └──► sales
+
+orders ── outbox ──► RabbitMQ (orderflow.events) ──┬──► payment   registra a cobrança
+                                                   └──► sales     atualiza os relatórios
+```
+
+| Serviço | Responsável por | Dados | Fatos |
+|---|---|---|---|
+| `gateway` | entrada única e página única de documentação | — | — |
+| `identity` | contas, login e emissão de tokens | MySQL `identity`; Redis `refreshToken*` | — |
+| `catalog` | produtos | MySQL `catalog` | — |
+| `cart` | carrinho e finalização | Redis `cart*` | — |
+| `orders` | pedidos e ciclo de vida | MySQL `orders`, com o outbox | publica os quatro fatos do pedido |
+| `payment` | cobrança no gateway de pagamento | MySQL `payment` | consome `order.confirmed` |
+| `sales` | relatórios de vendas | MongoDB `orderflow` | consome os quatro fatos |
+
+Cada serviço entra no MySQL, no Redis, no RabbitMQ e no MongoDB com um usuário
+próprio, que só alcança o que é dele. A posse dos dados é garantida pela
+permissão, não pela convenção, e um teste ponta a ponta confere a recusa em cada
+sentido.
+
+No Compose, todos os serviços escutam na 8080 dentro da rede, e só o gateway
+publica a porta. A infraestrutura publica as suas para inspeção: MySQL na 3308,
+Redis na 6379, RabbitMQ na 5672 (painel na 15672), MongoDB na 27017, Zipkin na
+9411 e o WireMock do gateway de pagamento na 8090.
+
+As decisões da separação, com as alternativas descartadas, estão em
+[research.md](specs/003-microsservicos/research.md). As principais:
+
+- **Por que separar** (R0): para estudar arquitetura distribuída, não por escala.
+  O monólito modular custaria menos e fica como a decisão a revisitar.
+- **Um repositório** (R2): um build e um histórico; bibliotecas em `platform/` sem
+  domínio, e os fatos em `contracts/`.
+- **Credencial** (R5): só o `identity` assina, com RS256; os outros validam pelas
+  chaves públicas, guardadas em cache pela validade do token.
+- **Chamadas síncronas com prazo** (R6, R7): circuit breaker por destino, 503 em
+  vez de espera, e chave de idempotência na finalização.
+- **Dados por serviço** (R8): um servidor MySQL com um schema e um usuário por
+  serviço; as tabelas mudaram de schema por `RENAME TABLE`, sem cópia.
+- **Fatos** (R9, R10): id lógico com versão, formato que só cresce, e outbox em
+  cada serviço que publica.
+- **Rastro** (R11): Zipkin, com o contexto guardado no outbox para atravessar as
+  mensagens.
+
+---
+
 ## Como rodar
 
 **Pré-requisito:** Docker.
@@ -78,6 +135,8 @@ serve para qualquer ambiente.
 | `ADMIN_EMAIL` | identifica o administrador criado na primeira subida |
 | `ADMIN_PASSWORD` | a senha dele; com o padrão, o log avisa na subida |
 | `REDIS_IDENTITY_PASSWORD`, `REDIS_CART_PASSWORD` | senhas dos usuários do Redis; o padrão é o nome do usuário |
+| `RABBITMQ_ORDERS_PASSWORD`, `RABBITMQ_PAYMENT_PASSWORD`, `RABBITMQ_SALES_PASSWORD` | senhas dos usuários do RabbitMQ; o padrão é o nome do usuário |
+| `MONGO_ROOT_PASSWORD`, `MONGO_SALES_PASSWORD` | senhas do root e do usuário `sales` do MongoDB; o padrão é o nome do usuário |
 
 O administrador é criado automaticamente quando não existe nenhum, então subir
 o projeto já dá acesso às rotas de `ADMIN`.
@@ -144,16 +203,52 @@ Se o serviço subir antes, ele cria a tabela vazia no próprio schema e o script
 recusado, sem mexer em nenhuma linha: com a tabela nova ainda vazia, apague-a e
 rode o script de novo. Volume novo não precisa de nada.
 
+Os usuários do RabbitMQ são criados a cada subida pelo container `rabbitmq-users`,
+então um volume antigo os recebe sem passo manual. O que muda é a fila de espera
+do `sales`, que passou a devolver os status por outra exchange. Num broker que já
+tem a fila com o destino antigo, o RabbitMQ recusa a declaração nova com
+`PRECONDITION_FAILED`: o `sales` registra o erro a cada conexão, e a fila antiga
+continua devolvendo pela exchange dos fatos. Confira que ela está vazia e apague-a
+uma vez, com o `sales` parado; ele a cria de novo ao subir:
+
+```bash
+docker compose exec -T rabbitmq rabbitmqctl list_queues name messages
+```
+
+```bash
+docker compose exec -T rabbitmq rabbitmqctl delete_queue order.views.projection.wait
+```
+
+No MongoDB, o usuário `sales` é criado pelo script de `docker/mongo/init/`, que só
+roda num volume vazio. Num volume antigo, a autenticação liga mesmo assim e o
+`sales` não consegue entrar. Enquanto não existe nenhum usuário, o Mongo aceita
+criar o primeiro pelo próprio container; com ele, rode o mesmo script:
+
+```bash
+docker compose up -d mongo
+```
+
+```bash
+docker compose exec -T mongo mongosh --quiet admin --eval "db.createUser({ user: 'root', pwd: 'root', roles: ['root'] })"
+```
+
+```bash
+docker compose exec -T mongo mongosh --quiet -u root -p root --authenticationDatabase admin /docker-entrypoint-initdb.d/01-sales-user.js
+```
+
+Com `MONGO_ROOT_PASSWORD` definida, use a mesma senha no lugar de `root`.
+
 Para desenvolver com os serviços fora do container (Java 21 necessário), suba
 só a infraestrutura e rode os módulos pelo Maven. O serviço de pedidos atende
 direto na porta 8080 e não precisa do MongoDB, que é só do serviço de vendas. A
 identidade sobe na porta 8083: é ela que emite o token, e os outros validam pelas
 chaves dela. O pedido consulta o catálogo, na 8081. O carrinho, na 8082, só é
 preciso para a finalização. O Redis do Compose não aceita o usuário padrão, então
-a identidade e o carrinho entram com o próprio:
+a identidade e o carrinho entram com o próprio. No RabbitMQ, cada serviço também
+tem o seu, criado pelo `rabbitmq-users`:
 
 ```bash
-docker compose up -d mysql redis rabbitmq zipkin
+docker compose up -d mysql redis rabbitmq rabbitmq-users zipkin
 ```
 
 ```bash
@@ -190,13 +285,13 @@ alteração:
 ./mvnw test
 ```
 
-Roda os **268 testes unitários** em poucos segundos, sem Docker.
+Roda os **271 testes unitários** em poucos segundos, sem Docker.
 
 ```bash
 ./mvnw verify
 ```
 
-Roda os unitários **mais os 217 de integração**, que sobem MySQL, MongoDB, Redis e
+Roda os unitários **mais os 218 de integração**, que sobem MySQL, MongoDB, Redis e
 RabbitMQ reais via Testcontainers, e um WireMock fazendo as vezes do gateway de
 pagamento, do catálogo, do serviço de pedidos, do serviço atrás da entrada única
 ou da exportação de pedidos.
@@ -205,7 +300,7 @@ ou da exportação de pedidos.
 ./mvnw verify -Pe2e -pl e2e -am
 ```
 
-Roda os **47 testes ponta a ponta**, que constroem as imagens, sobem o Compose
+Roda os **58 testes ponta a ponta**, que constroem as imagens, sobem o Compose
 inteiro pelo Testcontainers e falam com o sistema pela porta 8080, como um
 cliente. São eles que provam o que só aparece com os serviços juntos: todas as
 rotas respondendo pela entrada única, a chamada direta sem credencial recusada,
@@ -215,9 +310,10 @@ o serviço volta, a finalização recusada no prazo com o catálogo ou o serviç
 pedidos parados, um pedido só quando ela é repetida, a credencial aceita com a
 identidade parada, o refresh token de antes da extração renovado sem senha, a
 compra inteira do cadastro ao relatório, os fatos do pedido entregues uma vez aos
-serviços que estavam parados, e cada usuário do MySQL e do Redis sem acesso aos
-dados dos outros. Usam as
-mesmas portas do Compose, então a pilha de desenvolvimento precisa estar parada.
+serviços que estavam parados, o rastro de cada requisição no Zipkin, com o passo
+que falhou, e cada usuário do MySQL, do Redis, do RabbitMQ e do MongoDB sem
+acesso aos dados dos outros. Usam as mesmas portas do Compose, então a pilha de
+desenvolvimento precisa estar parada.
 
 | Módulo | Unitários | Integração | Ponta a ponta |
 |---|---|---|---|
@@ -226,15 +322,15 @@ mesmas portas do Compose, então a pilha de desenvolvimento precisa estar parada
 | `catalog` | 43 | 19 | — |
 | `cart` | 15 | 22 | — |
 | `payment` | 30 | 10 | — |
-| `sales` | 5 | 26 | — |
+| `sales` | 5 | 27 | — |
 | `gateway` | 2 | 27 | — |
 | `platform-outbox` | 16 | — | — |
-| `contracts` | 7 | — | — |
+| `contracts` | 10 | — | — |
 | `platform-web` | 6 | — | — |
 | `platform-security` | 6 | — | — |
 | `platform-messaging` | 5 | — | — |
 | `platform-test` | 2 | — | — |
-| `e2e` | — | — | 47 |
+| `e2e` | — | — | 58 |
 
 A separação é feita por convenção de nome: o Surefire pega só `*Test.java`, o
 Failsafe pega `*IT.java`. O teste que sobe o contexto inteiro do serviço de
@@ -286,6 +382,54 @@ Vazão média de 67 requisições por segundo, sem nenhuma falha. Máquina: AMD
 Ryzen 7 5700G (8 núcleos, 16 threads), 31 GB de RAM, Windows 11 com Docker
 Desktop 25.0.3 sobre WSL2 (16 CPUs e 15 GB para os containers). Cada aplicação
 roda com `-Xmx256m`.
+
+**Fim da migração**, em 2026-11-10, com os sete serviços atrás do gateway, na
+mesma máquina, com o mesmo cenário e volumes novos:
+
+| Requisição | Total | p50 (ms) | p75 (ms) | p95 (ms) | p99 (ms) | Máx. (ms) |
+|---|---|---|---|---|---|---|
+| vitrine: lista de produtos | 3.657 | 8 | 10 | 16 | 26 | 217 |
+| vitrine: detalhe do produto | 3.657 | 5 | 7 | 10 | 16 | 46 |
+| item no carrinho | 3.651 | 15 | 19 | 32 | 84 | 426 |
+| finalização da compra | 3.638 | 30 | 38 | 65 | 344 | 976 |
+| lista de pedidos | 3.626 | 9 | 10 | 15 | 23 | 71 |
+| detalhe do pedido | 3.626 | 7 | 9 | 13 | 19 | 103 |
+| login | 50 | 261 | 267 | 293 | 322 | 322 |
+| **todas** | **21.905** | **9** | **17** | **38** | **75** | **976** |
+
+Vazão média de 66 requisições por segundo, sem nenhuma falha. As metas absolutas
+continuam folgadas: p95 da finalização em 65 ms, contra 1 s, e da vitrine em
+16 ms, contra 300 ms.
+
+⚠️ **A meta relativa não foi atingida.** O SC-015 admite no máximo o dobro da linha
+de base no p95 da finalização, 44 ms; o resultado foi 65 ms, quase o triplo.
+
+A diferença vem do caminho. No monólito, a finalização era uma chamada só, com o
+catálogo consultado em memória. Agora ela atravessa o gateway, o `cart` e o
+`orders` em sequência, cada um validando o token, e o catálogo é consultado duas
+vezes pela rede: pelo carrinho, para recusar com 409 os itens indisponíveis, e
+pelo pedido, que não confia no preço que recebe. Os rastros da própria carga no
+Zipkin mostram onde fica o tempo:
+
+| Passo da finalização | p50 (ms) | p95 (ms) |
+|---|---|---|
+| entrada única, do início ao fim | 23 | 47 |
+| `cart`, do início ao fim | 22 | 46 |
+| `cart` → `catalog` | 3 | 5 |
+| `cart` → Redis | 2 | 3 |
+| `cart` → `orders` | 13 | 33 |
+| `orders` → `catalog` | 4 | 6 |
+
+O maior pedaço ainda é o trabalho do próprio `orders`: a chamada a ele leva 13 ms
+na mediana, dos quais 4 ms são o catálogo; o resto fica dentro do serviço, entre a
+validação do token, a busca da chave de idempotência e a gravação do pedido. O que
+mais cresce é a cauda, porque cada salto em sequência soma a própria variação: o
+p99 da finalização foi de 40 para 344 ms. O item no carrinho também mais que
+dobrou no p95, de 13 para 32 ms, porque passou a consultar o catálogo pela rede.
+
+No CI, o workflow manual `load.yml` roda a mesma simulação com 10 clientes por 60
+segundos e só confere a taxa de falhas: o runner compartilhado não dá tempos
+comparáveis.
 
 ---
 
@@ -541,7 +685,7 @@ O preço é entrega repetida: se o envio funcionar e a marcação falhar, a mens
 sai duas vezes. O consumidor já era idempotente — a chave deriva do pedido —, o
 que é pré-requisito para adotar o padrão, não detalhe.
 
-A mensagem guarda o JSON já serializado e o nome da classe, não o objeto. Assim
+A mensagem guarda o JSON já serializado e o id lógico do tipo, não o objeto. Assim
 o pacote do outbox não conhece nenhum evento concreto, e a mensagem sai com o
 mesmo formato de antes: o consumidor não soube da mudança.
 
@@ -957,7 +1101,9 @@ Eventos repetidos ou fora de ordem são tratados pela versão do pedido: a mesma
 confirmação não duplica o documento, e um evento antigo não faz o status
 regredir. Um status que chega antes da confirmação espera numa fila com TTL de
 10 segundos, por até nove vezes, antes de ir para a DLQ. O retry na própria fila
-travaria a confirmação atrás dele.
+travaria a confirmação atrás dele. Ao fim da espera, o status volta só para a
+fila da projeção, por uma exchange do próprio serviço, e não para a exchange dos
+fatos, onde chegaria de novo a todos os consumidores daquela chave.
 
 O preço do desenho é consistência eventual: uma venda confirmada pode levar
 alguns segundos para aparecer no relatório. A alternativa de guardar a projeção
@@ -1070,7 +1216,10 @@ lógico, como `order.confirmed.v1`, e não o nome da classe Java. Com o nome da
 classe, mover o evento de pacote quebraria todos os consumidores. O formato só
 cresce: o consumidor ignora campos que não conhece, e remover ou renomear um
 campo exige uma versão nova do fato. Um teste fixa os campos e os ids de cada
-fato, para que uma quebra de contrato apareça no build.
+fato, para que uma quebra de contrato apareça no build. Outro faz o papel de um
+consumidor da versão anterior: entrega cada fato, com campos que só um produtor
+mais novo enviaria, ao mesmo conversor que os consumidores usam, e confere que
+ele chega com o que o consumidor conhece.
 
 O mapa entre id e classe é o `ClassMapper` do conversor do Spring AMQP. O
 caminho previsto era o `DefaultJacksonJavaTypeMapper`, mas ele inverte o mapa num
@@ -1078,6 +1227,11 @@ caminho previsto era o `DefaultJacksonJavaTypeMapper`, mas ele inverte o mapa nu
 apontando para a mesma classe, qual dos dois sairia na publicação dependeria do
 hash. O `ClassMapper` publica sempre o id lógico e recusa qualquer id que não
 conheça, em vez de instanciar a classe que a mensagem pedir.
+
+No fim da migração, os nomes de classe antigos deixaram de ser aceitos. Antes,
+as filas, a DLQ e o outbox foram conferidos: nenhuma mensagem guardava o formato
+antigo. Mantê-los aceitaria para sempre um formato que ninguém mais publica, e
+qualquer mensagem com nome de classe passaria a ser um engano a recusar.
 
 ### O rastro atravessa o outbox
 
@@ -1089,6 +1243,13 @@ O outbox é o ponto em que o rastro se perderia: o evento é gravado na transaç
 da requisição e publicado depois, por outra thread. Por isso a tabela guarda o
 `traceparent` de quem gravou, e o relay publica dentro desse rastro. A cobrança
 e a projeção de vendas aparecem no mesmo rastro da confirmação que as causou.
+
+Um teste ponta a ponta prova o rastro pela API do Zipkin. Ele envia o próprio
+`traceparent`, que a entrada aceita, e assim sabe qual rastro procurar. Confere
+que uma finalização passa por `gateway`, `cart`, `orders` e `catalog`, que a
+confirmação chega aos consumidores do `payment` e do `sales`, e que, com o
+catálogo ou os pedidos parados, o passo que falhou aparece marcado com erro: é o
+span de quem chamou, com o endereço do serviço que não respondeu.
 
 Um detalhe custou tempo e vale registrar: no Boot 4.1, a propagação do Brave só
 existe com o envio dos rastros ligado. Os testes desligam o envio por padrão e,
@@ -1319,6 +1480,39 @@ relatórios não mostram status, então o teste lê a projeção no MongoDB para
 que o último fato chegou. As notificações, da spec 002, ainda não existem; quando
 chegarem, entram nos dois cenários.
 
+### Usuário por serviço também na mensageria e no MongoDB
+
+No fim da migração, o MySQL e o Redis já separavam os dados por permissão, mas o
+RabbitMQ e o MongoDB não: todos os serviços entravam no broker com o mesmo
+usuário, e o Mongo não pedia credencial. Ali, a posse dos dados valia só por
+convenção.
+
+No RabbitMQ, cada serviço ganhou um usuário com permissão só nos próprios
+recursos. Só o `orders` escreve na exchange dos fatos; o `payment` e o `sales`
+declaram e consomem as próprias filas, e nenhum lê a fila do outro. Os usuários
+são criados por um container que roda uma vez a cada subida e chama a API de
+administração do broker. O arquivo de definições do RabbitMQ, o caminho mais
+óbvio, não lê variável de ambiente, e a senha precisa vir de uma.
+
+Restringir as permissões mostrou um problema que estava escondido. A fila de
+espera do `sales`, onde fica um status que chega antes da confirmação, devolvia o
+fato para a exchange dos fatos ao fim do prazo. Para declarar a fila assim, o
+`sales` precisaria de escrita na exchange que só o `orders` deve usar. E o fato
+devolvido chegava de novo a todo consumidor daquela chave: hoje só o `sales`
+escuta envio, entrega e cancelamento, mas as notificações receberiam cada status
+adiado duas vezes. A fila passou a devolver por uma exchange do próprio `sales`,
+ligada só à fila da projeção. A exchange padrão do RabbitMQ faria o mesmo sem
+exchange nova, mas escrever nela permite publicar em qualquer fila pelo nome,
+inclusive na do `payment`. Um teste de integração liga um segundo consumidor à
+chave do envio e confere que o status adiado chega a ele uma vez só.
+
+No MongoDB, a autenticação foi ligada, com um usuário `sales` que só lê e escreve
+no banco da projeção. O teste ponta a ponta confere, pelo próprio protocolo de
+cada um, que o broker recusa o consumo e a publicação fora da permissão e que o
+Mongo recusa a leitura sem credencial. A conexão abre antes da operação recusada,
+de propósito: um login recusado também responde `ACCESS_REFUSED`, e sem isso o
+teste passaria antes de os usuários existirem.
+
 ## Endpoints
 
 **Contas**
@@ -1458,7 +1652,7 @@ mesma versão não contam.
 - [x] Fila de espera e DLQ para status que chega antes da confirmação
 - [x] Reconstrução da projeção pela exportação do serviço de pedidos
 - [x] Relatórios administrativos de vendas por dia e por produto
-- [x] 532 testes, separados por velocidade (unitários, integração e ponta a ponta)
+- [x] 547 testes, separados por velocidade (unitários, integração e ponta a ponta)
 - [x] Separação em serviços, etapa 1: entrada única, credencial RS256 com JWKS,
   fatos com tipo versionado, rastreamento com Zipkin e linha de base de carga
 - [x] Separação em serviços, etapa 2: relatórios de vendas como serviço próprio,
@@ -1473,9 +1667,18 @@ mesma versão não contam.
   emissora de credenciais, com os refresh tokens de antes renovando sem senha
 - [x] Separação em serviços, etapa 7: pedidos como serviço próprio, com o outbox
   movido junto; o monólito deixa de existir
+- [x] Acabamento da separação: rastro provado pelo Zipkin, fatos lidos por um
+  consumidor da versão anterior, usuário por serviço também no RabbitMQ e no
+  MongoDB, e teste de carga medido contra a linha de base
 - [x] Pipeline de CI rodando `mvn verify` a cada push
 - [x] Imagem da aplicação e stack completa em Docker, com conexões por variável de ambiente
 - [x] Documentação OpenAPI
 
 **Próximos passos**
+
+- [ ] Notificações como serviço próprio (spec 002), consumindo os fatos do pedido
+  e do usuário
+- [ ] Falha isolada com pagamentos, vendas e notificações parados ao mesmo tempo,
+  que depende das notificações
+- [ ] Trazer o p95 da finalização para no máximo o dobro da linha de base (SC-015)
 

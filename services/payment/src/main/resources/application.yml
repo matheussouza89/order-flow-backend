@@ -20,8 +20,8 @@ spring:
   rabbitmq:
     host: ${SPRING_RABBITMQ_HOST:localhost}
     port: ${SPRING_RABBITMQ_PORT:5672}
-    username: ${SPRING_RABBITMQ_USERNAME:orderflow}
-    password: ${SPRING_RABBITMQ_PASSWORD:orderflow}
+    username: ${SPRING_RABBITMQ_USERNAME:payment}
+    password: ${SPRING_RABBITMQ_PASSWORD:payment}
     template:
       observation-enabled: true
     listener:

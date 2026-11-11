@@ -9,7 +9,11 @@ import org.awaitility.Awaitility;
 import org.bson.Document;
 import org.bson.types.Decimal128;
 import org.junit.jupiter.api.Test;
+import org.springframework.amqp.core.AmqpAdmin;
+import org.springframework.amqp.core.BindingBuilder;
 import org.springframework.amqp.core.Message;
+import org.springframework.amqp.core.Queue;
+import org.springframework.amqp.core.TopicExchange;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.mongodb.core.MongoTemplate;
@@ -35,6 +39,9 @@ class OrderViewProjectionIT extends AbstractIntegrationTest {
 
     @Autowired
     private RabbitTemplate rabbitTemplate;
+
+    @Autowired
+    private AmqpAdmin amqpAdmin;
 
     @Test
     void shouldApplyTheSameConfirmationOnlyOnce() {
@@ -78,6 +85,23 @@ class OrderViewProjectionIT extends AbstractIntegrationTest {
 
         assertEquals(2L, viewOf(orderId).getLong("version"));
         assertFalse(deadLettered(orderId));
+    }
+
+    @Test
+    void shouldReturnADeferredStatusToTheProjectionOnly() {
+        Queue anotherConsumer = amqpAdmin.declareQueue();
+        amqpAdmin.declareBinding(BindingBuilder.bind(anotherConsumer)
+                .to(new TopicExchange(RabbitMqConfig.EXCHANGE)).with(OrderFacts.SHIPPED_KEY));
+        UUID orderId = UUID.randomUUID();
+
+        publish(OrderFacts.SHIPPED_KEY, new OrderShippedEvent(orderId, 2L, Instant.now()));
+        publish(OrderFacts.CONFIRMED_KEY, confirmed(orderId, 1L));
+        Awaitility.await().atMost(Duration.ofSeconds(60)).until(() -> {
+            Document view = viewOf(orderId);
+            return view != null && "SHIPPED".equals(view.getString("status"));
+        });
+
+        assertEquals(1, copiesOf(orderId, anotherConsumer.getName()));
     }
 
     @Test
@@ -155,6 +179,15 @@ class OrderViewProjectionIT extends AbstractIntegrationTest {
 
     private Document viewOf(UUID orderId) {
         return mongoTemplate.findById(orderId.toString(), Document.class, VIEWS);
+    }
+
+    private int copiesOf(UUID orderId, String queue) {
+        int copies = 0;
+        Message message;
+        while ((message = rabbitTemplate.receive(queue)) != null) {
+            copies += new String(message.getBody()).contains(orderId.toString()) ? 1 : 0;
+        }
+        return copies;
     }
 
     private boolean deadLettered(UUID orderId) {

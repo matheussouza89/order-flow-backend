@@ -17,14 +17,12 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 class FactTypeMappingTest {
     private static final String TYPE_ID_HEADER = "__TypeId__";
     private static final String SAMPLE_V1 = "sample.happened.v1";
-    private static final String SAMPLE_LEGACY = "com.example.old.SampleHappened";
 
     record SampleHappened(UUID id, String name) {
     }
 
     private final MessageConverter converter = new RabbitMqConfig().messageConverter(
-            new FactTypes(Map.of(SAMPLE_V1, SampleHappened.class),
-                    Map.of(SAMPLE_LEGACY, SampleHappened.class)));
+            new FactTypes(Map.of(SAMPLE_V1, SampleHappened.class)));
 
     private final UUID id = UUID.randomUUID();
 
@@ -43,12 +41,12 @@ class FactTypeMappingTest {
     }
 
     @Test
-    void shouldReadAMessagePublishedWithTheLegacyClassName() {
+    void shouldRefuseTheClassNameOfARegisteredFactInsteadOfItsLogicalId() {
         Message message = json("""
                 { "id": "%s", "name": "Teclado" }
-                """.formatted(id), SAMPLE_LEGACY);
+                """.formatted(id), SampleHappened.class.getName());
 
-        assertEquals(new SampleHappened(id, "Teclado"), converter.fromMessage(message));
+        assertThrows(MessageConversionException.class, () -> converter.fromMessage(message));
     }
 
     @Test

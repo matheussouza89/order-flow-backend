@@ -3,13 +3,13 @@ spring:
     name: sales
 
   mongodb:
-    uri: ${MONGO_URI:mongodb://localhost:27017/orderflow}
+    uri: ${MONGO_URI:mongodb://sales:sales@localhost:27017/orderflow}
 
   rabbitmq:
     host: ${SPRING_RABBITMQ_HOST:localhost}
     port: ${SPRING_RABBITMQ_PORT:5672}
-    username: ${SPRING_RABBITMQ_USERNAME:orderflow}
-    password: ${SPRING_RABBITMQ_PASSWORD:orderflow}
+    username: ${SPRING_RABBITMQ_USERNAME:sales}
+    password: ${SPRING_RABBITMQ_PASSWORD:sales}
     template:
       observation-enabled: true
     listener:

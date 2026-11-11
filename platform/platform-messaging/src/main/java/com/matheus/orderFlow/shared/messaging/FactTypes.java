@@ -5,7 +5,6 @@ import org.springframework.amqp.support.converter.AbstractJavaTypeMapper;
 import org.springframework.amqp.support.converter.ClassMapper;
 import org.springframework.amqp.support.converter.MessageConversionException;
 
-import java.util.HashMap;
 import java.util.Map;
 import java.util.stream.Collectors;
 
@@ -15,13 +14,10 @@ public class FactTypes implements ClassMapper {
     private final Map<Class<?>, String> idByType;
     private final Map<String, Class<?>> typeById;
 
-    public FactTypes(Map<String, Class<?>> types, Map<String, Class<?>> legacyTypes) {
+    public FactTypes(Map<String, Class<?>> types) {
         this.idByType = types.entrySet().stream()
                 .collect(Collectors.toUnmodifiableMap(Map.Entry::getValue, Map.Entry::getKey));
-
-        Map<String, Class<?>> readable = new HashMap<>(legacyTypes);
-        readable.putAll(types);
-        this.typeById = Map.copyOf(readable);
+        this.typeById = Map.copyOf(types);
     }
 
     public String idOf(Class<?> type) {

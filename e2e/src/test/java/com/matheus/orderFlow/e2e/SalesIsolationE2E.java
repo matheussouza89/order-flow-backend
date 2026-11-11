@@ -51,8 +51,7 @@ class SalesIsolationE2E extends AbstractE2E {
                 .until(() -> quantitySold(admin, product), quantity -> quantity == 2);
         String before = settledReports(admin);
 
-        Container.ExecResult emptied = runIn("mongo", "mongosh", "--quiet", "orderflow",
-                "--eval", "db.order_views.deleteMany({})");
+        Container.ExecResult emptied = inTheSalesDatabase("db.order_views.deleteMany({})");
         assertEquals(0, emptied.getExitCode(), emptied.getStderr());
         assertEquals(0L, quantitySold(admin, product));
 

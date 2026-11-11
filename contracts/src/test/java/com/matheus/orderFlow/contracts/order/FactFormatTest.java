@@ -64,16 +64,6 @@ class FactFormatTest {
     }
 
     @Test
-    void shouldStillReadTheClassNamesUsedBeforeTheVersionedIds() {
-        assertEquals(Map.of(
-                "com.matheus.orderFlow.order.OrderConfirmedEvent", OrderConfirmedEvent.class,
-                "com.matheus.orderFlow.order.OrderShippedEvent", OrderShippedEvent.class,
-                "com.matheus.orderFlow.order.OrderDeliveredEvent", OrderDeliveredEvent.class,
-                "com.matheus.orderFlow.order.OrderCancelledEvent", OrderCancelledEvent.class),
-                OrderFacts.LEGACY_TYPES);
-    }
-
-    @Test
     void shouldRouteEachFactByTheSameKeyAsBefore() {
         assertEquals("order.confirmed", OrderFacts.CONFIRMED_KEY);
         assertEquals("order.shipped", OrderFacts.SHIPPED_KEY);
