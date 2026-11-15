@@ -45,6 +45,7 @@ class GatewayRoutingIT {
     private static final WireMockServer CART = new WireMockServer(options().port(freePort()));
     private static final WireMockServer IDENTITY = new WireMockServer(options().port(freePort()));
     private static final String TOKEN = "Bearer any-token";
+    private static final String FRONTEND = "http://localhost:5173";
     private static final String CONFLICT = """
             {"status":409,"message":"Only pending orders can be confirmed","errors":{}}""";
 
@@ -236,6 +237,49 @@ class GatewayRoutingIT {
         assertEquals(503, response.statusCode());
         assertEquals(unavailable, response.body());
         CART.verify(1, postRequestedFor(urlEqualTo("/cart/checkout")));
+    }
+
+    @Test
+    void shouldAnswerTheBrowserPreflightWithoutReachingTheService() throws Exception {
+        HttpResponse<String> response = send(to("/cart/checkout")
+                .header("Origin", FRONTEND)
+                .header("Access-Control-Request-Method", "POST")
+                .header("Access-Control-Request-Headers", "authorization,content-type,idempotency-key")
+                .method("OPTIONS", HttpRequest.BodyPublishers.noBody()));
+
+        assertEquals(200, response.statusCode());
+        assertThat(response.headers().firstValue("Access-Control-Allow-Origin")).contains(FRONTEND);
+        assertThat(response.headers().firstValue("Access-Control-Allow-Methods").orElseThrow()).contains("POST");
+        assertThat(response.headers().firstValue("Access-Control-Allow-Headers").orElseThrow().toLowerCase())
+                .contains("authorization", "content-type", "idempotency-key");
+        CART.verify(0, anyRequestedFor(anyUrl()));
+    }
+
+    @Test
+    void shouldRefuseThePreflightFromAnUnknownOrigin() throws Exception {
+        HttpResponse<String> response = send(to("/cart/checkout")
+                .header("Origin", "https://unknown.example")
+                .header("Access-Control-Request-Method", "POST")
+                .method("OPTIONS", HttpRequest.BodyPublishers.noBody()));
+
+        assertEquals(403, response.statusCode());
+        assertThat(response.headers().firstValue("Access-Control-Allow-Origin")).isEmpty();
+        CART.verify(0, anyRequestedFor(anyUrl()));
+    }
+
+    @Test
+    void shouldLetTheFrontendReadTheLocationOfWhatItCreated() throws Exception {
+        ORDERS.stubFor(post(urlEqualTo("/orders"))
+                .willReturn(aResponse().withStatus(201).withHeader("Location", "http://localhost/orders/42")));
+
+        HttpResponse<String> response = send(to("/orders")
+                .header("Origin", FRONTEND)
+                .header("Authorization", TOKEN)
+                .POST(HttpRequest.BodyPublishers.noBody()));
+
+        assertEquals(201, response.statusCode());
+        assertThat(response.headers().firstValue("Access-Control-Allow-Origin")).contains(FRONTEND);
+        assertThat(response.headers().firstValue("Access-Control-Expose-Headers")).contains("Location");
     }
 
     @Test

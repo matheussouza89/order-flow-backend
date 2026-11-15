@@ -137,6 +137,7 @@ serve para qualquer ambiente.
 | `REDIS_IDENTITY_PASSWORD`, `REDIS_CART_PASSWORD` | senhas dos usuários do Redis; o padrão é o nome do usuário |
 | `RABBITMQ_ORDERS_PASSWORD`, `RABBITMQ_PAYMENT_PASSWORD`, `RABBITMQ_SALES_PASSWORD` | senhas dos usuários do RabbitMQ; o padrão é o nome do usuário |
 | `MONGO_ROOT_PASSWORD`, `MONGO_SALES_PASSWORD` | senhas do root e do usuário `sales` do MongoDB; o padrão é o nome do usuário |
+| `CORS_ALLOWED_ORIGINS` | origens, separadas por vírgula, de onde o navegador pode chamar a API; o padrão é o frontend local em `http://localhost:5173` |
 
 O administrador é criado automaticamente quando não existe nenhum, então subir
 o projeto já dá acesso às rotas de `ADMIN`.
@@ -291,7 +292,7 @@ Roda os **271 testes unitários** em poucos segundos, sem Docker.
 ./mvnw verify
 ```
 
-Roda os unitários **mais os 218 de integração**, que sobem MySQL, MongoDB, Redis e
+Roda os unitários **mais os 221 de integração**, que sobem MySQL, MongoDB, Redis e
 RabbitMQ reais via Testcontainers, e um WireMock fazendo as vezes do gateway de
 pagamento, do catálogo, do serviço de pedidos, do serviço atrás da entrada única
 ou da exportação de pedidos.
@@ -323,7 +324,7 @@ desenvolvimento precisa estar parada.
 | `cart` | 15 | 22 | — |
 | `payment` | 30 | 10 | — |
 | `sales` | 5 | 27 | — |
-| `gateway` | 2 | 27 | — |
+| `gateway` | 2 | 30 | — |
 | `platform-outbox` | 16 | — | — |
 | `contracts` | 10 | — | — |
 | `platform-web` | 6 | — | — |
@@ -1221,6 +1222,17 @@ estourava os 5 que a especificação admite. A entrada desliga essas repetiçõe
 Repetir é decisão de quem chamou, que sabe se a operação admite repetição; a
 entrada só repassa.
 
+O navegador só deixa uma página chamar outra origem se a resposta autorizar, e o
+frontend roda em outra porta. A autorização fica na entrada, a única origem que o
+navegador enxerga; os serviços continuam sem saber que existe um navegador. A
+pergunta prévia (`OPTIONS`) é respondida ali mesmo e não chega ao serviço.
+
+As origens aceitas vêm de `CORS_ALLOWED_ORIGINS`, uma lista explícita: uma origem
+desconhecida recebe 403 na pergunta prévia. Credenciais do navegador, como
+cookies, ficam desligadas, porque o token viaja no cabeçalho `Authorization`,
+posto pelo próprio frontend. O `Location` das respostas 201 é exposto; sem isso,
+o navegador o esconde do código da página.
+
 A documentação também tem uma página só, servida pela entrada, com uma entrada
 por serviço. Cada serviço documenta as próprias rotas, e as que a entrada não
 repassa ficam fora do documento.
@@ -1668,7 +1680,7 @@ mesma versão não contam.
 - [x] Fila de espera e DLQ para status que chega antes da confirmação
 - [x] Reconstrução da projeção pela exportação do serviço de pedidos
 - [x] Relatórios administrativos de vendas por dia e por produto
-- [x] 547 testes, separados por velocidade (unitários, integração e ponta a ponta)
+- [x] 550 testes, separados por velocidade (unitários, integração e ponta a ponta)
 - [x] Separação em serviços, etapa 1: entrada única, credencial RS256 com JWKS,
   fatos com tipo versionado, rastreamento com Zipkin e linha de base de carga
 - [x] Separação em serviços, etapa 2: relatórios de vendas como serviço próprio,
@@ -1686,6 +1698,7 @@ mesma versão não contam.
 - [x] Acabamento da separação: rastro provado pelo Zipkin, fatos lidos por um
   consumidor da versão anterior, usuário por serviço também no RabbitMQ e no
   MongoDB, e teste de carga medido contra a linha de base
+- [x] CORS na entrada única, com as origens do frontend por variável de ambiente
 - [x] Pipeline de CI rodando `mvn verify` a cada push
 - [x] Imagem da aplicação e stack completa em Docker, com conexões por variável de ambiente
 - [x] Documentação OpenAPI
