@@ -279,6 +279,9 @@ services:
   zipkin:
     image: openzipkin/zipkin
     restart: unless-stopped
+    environment:
+      JAVA_OPTS: -Xms512m -Xmx512m -XX:+ExitOnOutOfMemoryError
+      MEM_MAX_SPANS: 100000
     ports:
       - "9411:9411"
     networks:
