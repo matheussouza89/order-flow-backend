@@ -91,6 +91,10 @@ spring:
                 - PreserveHostHeader
                 - SetPath=/v3/api-docs
 
+gateway:
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}
+
 management:
   tracing:
     sampling:

@@ -13,6 +13,7 @@ services:
       CATALOG_URL: http://catalog:8080
       CART_URL: http://cart:8080
       IDENTITY_URL: http://identity:8080
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:5173}
       ZIPKIN_ENDPOINT: http://zipkin:9411/api/v2/spans
       JAVA_TOOL_OPTIONS: -Xmx256m
     ports:
@@ -279,6 +280,9 @@ services:
   zipkin:
     image: openzipkin/zipkin
     restart: unless-stopped
+    environment:
+      JAVA_OPTS: -Xms512m -Xmx512m -XX:+ExitOnOutOfMemoryError
+      MEM_MAX_SPANS: 100000
     ports:
       - "9411:9411"
     networks:
