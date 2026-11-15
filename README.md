@@ -427,6 +427,22 @@ mais cresce é a cauda, porque cada salto em sequência soma a própria variaç�
 p99 da finalização foi de 40 para 344 ms. O item no carrinho também mais que
 dobrou no p95, de 13 para 32 ms, porque passou a consultar o catálogo pela rede.
 
+**Nova medição**, em 2026-11-14. Durante a carga, o Zipkin do Compose caía por
+falta de memória: o armazenamento em memória sobe com 160 MB e guarda até 500 mil
+spans, e com amostragem de 100% cada span ocupa perto de 2,5 KB. Ele reiniciava a
+cada minuto e pouco sob carga, e a cada duas horas e meia parado, porque o health
+check e o relay do outbox também geram spans. O Compose agora dá 512 MB ao
+Zipkin e o limita a 100 mil spans.
+
+Com o Zipkin estável, três rodadas de cada pilha, alternadas e com os containers
+reiniciados entre elas, deram p95 da finalização de 21, 21 e 18 ms na linha de
+base e de 51, 45 e 56 ms com os serviços: medianas de 21 e 51 ms, cerca de 2,4
+vezes. A meta continua não atingida. A CPU ficou perto de 94% ociosa e a busca
+não achou gargalo no código: o tempo está nos saltos de rede e na cauda da
+gravação do pedido, onde o commit do MySQL passou de 700 ms nas duas pilhas,
+efeito do disco do Docker Desktop. Cortar a segunda consulta ao catálogo
+pouparia só 3 a 4 ms.
+
 No CI, o workflow manual `load.yml` roda a mesma simulação com 10 clientes por 60
 segundos e só confere a taxa de falhas: o runner compartilhado não dá tempos
 comparáveis.
