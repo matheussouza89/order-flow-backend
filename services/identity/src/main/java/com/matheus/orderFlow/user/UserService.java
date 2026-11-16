@@ -1,6 +1,10 @@
 package com.matheus.orderFlow.user;
 
+import com.matheus.orderFlow.contracts.user.UserEmailChangedEvent;
+import com.matheus.orderFlow.contracts.user.UserFacts;
+import com.matheus.orderFlow.contracts.user.UserRegisteredEvent;
 import com.matheus.orderFlow.shared.exception.NotFoundException;
+import com.matheus.orderFlow.shared.outbox.OutboxWriter;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -21,6 +25,7 @@ public class UserService {
     private final PasswordEncoder passwordEncoder;
     private final TokenService tokenService;
     private final RefreshTokenService refreshTokenService;
+    private final OutboxWriter outboxWriter;
 
     private String absentUserHash;
 
@@ -38,7 +43,11 @@ public class UserService {
 
         log.info("Creating user: {}", newUser.getEmail());
 
-        return UserResponse.from(userRepository.save(newUser));
+        User created = userRepository.saveAndFlush(newUser);
+        outboxWriter.record(UserFacts.REGISTERED_KEY,
+                new UserRegisteredEvent(created.getId(), created.getEmail(), created.getUpdatedAt()));
+
+        return UserResponse.from(created);
     }
 
     @Transactional(readOnly = true)
@@ -59,8 +68,9 @@ public class UserService {
     @Transactional
     public UserResponse updateEmail(UUID id, String newEmail) {
         User user = findOrThrow(id);
+        boolean changed = !user.getEmail().equals(newEmail);
 
-        if (!user.getEmail().equals(newEmail)) {
+        if (changed) {
             requireEmailAvailable(newEmail);
         }
 
@@ -68,7 +78,14 @@ public class UserService {
 
         log.info("Updating user email: id={}", id);
 
-        return UserResponse.from(userRepository.save(user));
+        User updated = userRepository.saveAndFlush(user);
+
+        if (changed) {
+            outboxWriter.record(UserFacts.EMAIL_CHANGED_KEY,
+                    new UserEmailChangedEvent(updated.getId(), updated.getEmail(), updated.getUpdatedAt()));
+        }
+
+        return UserResponse.from(updated);
     }
 
     @Transactional
