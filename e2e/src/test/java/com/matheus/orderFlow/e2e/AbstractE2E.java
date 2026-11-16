@@ -12,9 +12,11 @@ import java.io.File;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.net.URI;
+import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
@@ -29,6 +31,7 @@ public abstract class AbstractE2E {
     private static final int HTTP_PORT = 8080;
     protected static final int AMQP_PORT = 5672;
     protected static final int ZIPKIN_PORT = 9411;
+    private static final int MAILPIT_PORT = 8025;
 
     private static final ComposeContainer COMPOSE = new ComposeContainer(new File("../docker-compose.yml"))
             .withBuild(true)
@@ -40,6 +43,8 @@ public abstract class AbstractE2E {
             .withExposedService("catalog", HTTP_PORT, healthy())
             .withExposedService("cart", HTTP_PORT, healthy())
             .withExposedService("identity", HTTP_PORT, healthy())
+            .withExposedService("notifications", HTTP_PORT, healthy())
+            .withExposedService("mailpit", MAILPIT_PORT)
             .withExposedService("wiremock", HTTP_PORT)
             .withExposedService("rabbitmq", AMQP_PORT)
             .withExposedService("zipkin", ZIPKIN_PORT);
@@ -76,6 +81,37 @@ public abstract class AbstractE2E {
                 .atMost(Duration.ofMinutes(2))
                 .ignoreExceptions()
                 .until(() -> send(HttpRequest.newBuilder(service(service, "/actuator/health")).GET()).statusCode() == 200);
+    }
+
+    protected record Mail(String subject, String text) {
+    }
+
+    protected static void stopTheMailServer() {
+        DockerClientFactory.instance().client().stopContainerCmd(containerOf("mailpit")).exec();
+    }
+
+    protected static void startTheMailServer() {
+        DockerClientFactory.instance().client().startContainerCmd(containerOf("mailpit")).exec();
+        Awaitility.await()
+                .atMost(Duration.ofMinutes(1))
+                .ignoreExceptions()
+                .until(() -> send(HttpRequest.newBuilder(mailpit("/livez")).GET()).statusCode() == 200);
+    }
+
+    protected static List<Mail> mailsTo(String address) {
+        String query = URLEncoder.encode("to:" + address, StandardCharsets.UTF_8);
+        List<String> ids = JsonPath.read(send(HttpRequest.newBuilder(mailpit("/api/v1/search?query=" + query))
+                .GET()).body(), "$.messages[*].ID");
+
+        return ids.stream()
+                .map(id -> send(HttpRequest.newBuilder(mailpit("/api/v1/message/" + id)).GET()).body())
+                .map(message -> new Mail(JsonPath.read(message, "$.Subject"), JsonPath.read(message, "$.Text")))
+                .toList();
+    }
+
+    private static URI mailpit(String path) {
+        return URI.create("http://" + COMPOSE.getServiceHost("mailpit", MAILPIT_PORT) + ":"
+                + COMPOSE.getServicePort("mailpit", MAILPIT_PORT) + path);
     }
 
     protected static Container.ExecResult runIn(String service, String... command) {
