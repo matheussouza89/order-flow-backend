@@ -48,6 +48,12 @@ spring:
                 - Path=/admin/sales/**
               filters:
                 - PreserveHostHeader
+            - id: notifications
+              uri: ${NOTIFICATIONS_URL:http://notifications:8080}
+              predicates:
+                - Path=/admin/notifications/**
+              filters:
+                - PreserveHostHeader
             - id: orders-docs
               uri: ${ORDERS_URL:http://orders:8080}
               predicates:
@@ -90,6 +96,13 @@ spring:
               filters:
                 - PreserveHostHeader
                 - SetPath=/v3/api-docs
+            - id: notifications-docs
+              uri: ${NOTIFICATIONS_URL:http://notifications:8080}
+              predicates:
+                - Path=/v3/api-docs/notifications
+              filters:
+                - PreserveHostHeader
+                - SetPath=/v3/api-docs
 
 gateway:
   cors:
@@ -118,3 +131,5 @@ springdoc:
         url: /v3/api-docs/payment
       - name: sales
         url: /v3/api-docs/sales
+      - name: notifications
+        url: /v3/api-docs/notifications

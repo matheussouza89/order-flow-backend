@@ -18,6 +18,16 @@ grant orders "$RABBITMQ_ORDERS_PASSWORD" \
   '^orderflow\\.events(\\.dlq)?$' \
   '^orderflow\\.events\\.dlx$'
 
+grant identity "$RABBITMQ_IDENTITY_PASSWORD" \
+  '^orderflow\\.events(\\.dlx|\\.dlq)?$' \
+  '^orderflow\\.events(\\.dlq)?$' \
+  '^orderflow\\.events\\.dlx$'
+
+grant notifications "$RABBITMQ_NOTIFICATIONS_PASSWORD" \
+  '^(orderflow\\.events(\\.dlx|\\.dlq)?|order\\.status\\.notifications|user\\.contacts\\.notifications)$' \
+  '^(orderflow\\.events\\.dlq|order\\.status\\.notifications|user\\.contacts\\.notifications)$' \
+  '^(orderflow\\.events(\\.dlx)?|order\\.status\\.notifications|user\\.contacts\\.notifications)$'
+
 grant payment "$RABBITMQ_PAYMENT_PASSWORD" \
   '^(orderflow\\.events(\\.dlx|\\.dlq)?|order\\.confirmed\\.payment)$' \
   '^(orderflow\\.events\\.dlq|order\\.confirmed\\.payment)$' \

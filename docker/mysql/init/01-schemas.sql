@@ -3,15 +3,18 @@ CREATE DATABASE IF NOT EXISTS identity;
 CREATE DATABASE IF NOT EXISTS catalog;
 CREATE DATABASE IF NOT EXISTS orders;
 CREATE DATABASE IF NOT EXISTS payment;
+CREATE DATABASE IF NOT EXISTS notifications;
 
 CREATE USER IF NOT EXISTS 'identity'@'%' IDENTIFIED BY 'identity';
 CREATE USER IF NOT EXISTS 'catalog'@'%' IDENTIFIED BY 'catalog';
 CREATE USER IF NOT EXISTS 'orders'@'%' IDENTIFIED BY 'orders';
 CREATE USER IF NOT EXISTS 'payment'@'%' IDENTIFIED BY 'payment';
+CREATE USER IF NOT EXISTS 'notifications'@'%' IDENTIFIED BY 'notifications';
 
 GRANT ALL PRIVILEGES ON identity.* TO 'identity'@'%';
 GRANT ALL PRIVILEGES ON catalog.* TO 'catalog'@'%';
 GRANT ALL PRIVILEGES ON orders.* TO 'orders'@'%';
 GRANT ALL PRIVILEGES ON payment.* TO 'payment'@'%';
+GRANT ALL PRIVILEGES ON notifications.* TO 'notifications'@'%';
 
 FLUSH PRIVILEGES;
