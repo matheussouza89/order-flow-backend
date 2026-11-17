@@ -5,8 +5,10 @@ import org.junit.jupiter.api.Test;
 
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.List;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class FullPurchaseE2E extends AbstractE2E {
@@ -43,5 +45,13 @@ class FullPurchaseE2E extends AbstractE2E {
                 .atMost(Duration.ofSeconds(60))
                 .ignoreExceptions()
                 .until(() -> quantitySold(admin, product), quantity -> quantity == 3);
+
+        List<Mail> mails = Awaitility.await()
+                .atMost(Duration.ofSeconds(60))
+                .until(() -> mailsTo(customer.email()), received -> received.size() == 3);
+        assertThat(mails).extracting(Mail::subject).containsExactlyInAnyOrder(
+                "Pedido " + orderId + " confirmado",
+                "Pedido " + orderId + " enviado",
+                "Pedido " + orderId + " entregue");
     }
 }

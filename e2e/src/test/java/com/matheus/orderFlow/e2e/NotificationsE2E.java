@@ -51,7 +51,10 @@ class NotificationsE2E extends AbstractE2E {
             startTheMailServer();
         }
 
-        List<Mail> mails = awaitMails(customer, 1, Duration.ofMinutes(4));
-        assertThat(mails).extracting(Mail::subject).contains("Pedido " + orderId + " confirmado");
+        List<Mail> mails = awaitMails(customer, 3, Duration.ofMinutes(4));
+        assertThat(mails).extracting(Mail::subject).containsExactlyInAnyOrder(
+                "Pedido " + orderId + " confirmado",
+                "Pedido " + orderId + " enviado",
+                "Pedido " + orderId + " entregue");
     }
 }
