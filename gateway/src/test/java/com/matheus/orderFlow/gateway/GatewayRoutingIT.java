@@ -44,6 +44,7 @@ class GatewayRoutingIT {
     private static final WireMockServer CATALOG = new WireMockServer(options().port(freePort()));
     private static final WireMockServer CART = new WireMockServer(options().port(freePort()));
     private static final WireMockServer IDENTITY = new WireMockServer(options().port(freePort()));
+    private static final WireMockServer NOTIFICATIONS = new WireMockServer(options().port(freePort()));
     private static final String TOKEN = "Bearer any-token";
     private static final String FRONTEND = "http://localhost:5173";
     private static final String CONFLICT = """
@@ -56,6 +57,7 @@ class GatewayRoutingIT {
         CATALOG.start();
         CART.start();
         IDENTITY.start();
+        NOTIFICATIONS.start();
     }
 
     private static int freePort() {
@@ -74,6 +76,7 @@ class GatewayRoutingIT {
         registry.add("CATALOG_URL", CATALOG::baseUrl);
         registry.add("CART_URL", CART::baseUrl);
         registry.add("IDENTITY_URL", IDENTITY::baseUrl);
+        registry.add("NOTIFICATIONS_URL", NOTIFICATIONS::baseUrl);
     }
 
     @AfterAll
@@ -84,6 +87,7 @@ class GatewayRoutingIT {
         CATALOG.stop();
         CART.stop();
         IDENTITY.stop();
+        NOTIFICATIONS.stop();
     }
 
     @LocalServerPort
@@ -99,6 +103,7 @@ class GatewayRoutingIT {
         CATALOG.resetAll();
         CART.resetAll();
         IDENTITY.resetAll();
+        NOTIFICATIONS.resetAll();
     }
 
     private HttpResponse<String> send(HttpRequest.Builder request) throws IOException, InterruptedException {
@@ -192,6 +197,17 @@ class GatewayRoutingIT {
         ORDERS.verify(0, anyRequestedFor(anyUrl()));
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"/admin/notifications?state=FAILED", "/admin/notifications/contacts/import"})
+    void shouldRouteTheNotificationsToTheNotificationsService(String path) throws Exception {
+        NOTIFICATIONS.stubFor(WireMock.any(urlEqualTo(path)).willReturn(aResponse().withStatus(200)));
+
+        assertEquals(200, send(to(path).header("Authorization", TOKEN).GET()).statusCode());
+        NOTIFICATIONS.verify(anyRequestedFor(urlEqualTo(path)).withHeader("Authorization", equalTo(TOKEN)));
+        SALES.verify(0, anyRequestedFor(anyUrl()));
+        ORDERS.verify(0, anyRequestedFor(anyUrl()));
+    }
+
     @Test
     void shouldPassTheServiceErrorsThroughUnchanged() throws Exception {
         ORDERS.stubFor(post(urlEqualTo("/orders/1/confirm"))
@@ -220,6 +236,7 @@ class GatewayRoutingIT {
         CATALOG.verify(0, anyRequestedFor(anyUrl()));
         CART.verify(0, anyRequestedFor(anyUrl()));
         IDENTITY.verify(0, anyRequestedFor(anyUrl()));
+        NOTIFICATIONS.verify(0, anyRequestedFor(anyUrl()));
     }
 
     @Test

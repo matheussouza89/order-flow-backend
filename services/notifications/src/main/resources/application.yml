@@ -1,0 +1,68 @@
+spring:
+  application:
+    name: notifications
+
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3308/notifications}
+    username: ${SPRING_DATASOURCE_USERNAME:notifications}
+    password: ${SPRING_DATASOURCE_PASSWORD:notifications}
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    baseline-version: 0
+
+  rabbitmq:
+    host: ${SPRING_RABBITMQ_HOST:localhost}
+    port: ${SPRING_RABBITMQ_PORT:5672}
+    username: ${SPRING_RABBITMQ_USERNAME:notifications}
+    password: ${SPRING_RABBITMQ_PASSWORD:notifications}
+    template:
+      observation-enabled: true
+    listener:
+      simple:
+        observation-enabled: true
+
+  mail:
+    host: ${MAIL_HOST:localhost}
+    port: ${MAIL_PORT:1025}
+    properties:
+      mail.smtp.connectiontimeout: 2000
+      mail.smtp.timeout: 5000
+      mail.smtp.localhost: orderflow.local
+      mail.from: ${orderflow.notifications.mail.from}
+
+  http:
+    serviceclient:
+      identity:
+        base-url: ${IDENTITY_URL:http://identity:8080}
+        read-timeout: 10s
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: ${JWK_SET_URI:http://identity:8080/.well-known/jwks.json}
+
+management:
+  health:
+    mail:
+      enabled: false
+  tracing:
+    sampling:
+      probability: 1.0
+    export:
+      zipkin:
+        endpoint: ${ZIPKIN_ENDPOINT:http://localhost:9411/api/v2/spans}
+
+orderflow:
+  notifications:
+    mail:
+      from: ${MAIL_FROM:nao-responda@orderflow.local}
+    sender:
+      poll-interval: ${NOTIFICATIONS_POLL_INTERVAL:5000}

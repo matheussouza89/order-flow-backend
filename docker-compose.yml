@@ -13,6 +13,7 @@ services:
       CATALOG_URL: http://catalog:8080
       CART_URL: http://cart:8080
       IDENTITY_URL: http://identity:8080
+      NOTIFICATIONS_URL: http://notifications:8080
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:5173}
       ZIPKIN_ENDPOINT: http://zipkin:9411/api/v2/spans
       JAVA_TOOL_OPTIONS: -Xmx256m
@@ -37,6 +38,8 @@ services:
         condition: service_healthy
       identity:
         condition: service_healthy
+      notifications:
+        condition: service_healthy
     networks:
       - orderflow-network
 
@@ -53,6 +56,9 @@ services:
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_USERNAME: identity
       SPRING_DATA_REDIS_PASSWORD: ${REDIS_IDENTITY_PASSWORD:-identity}
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_USERNAME: identity
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_IDENTITY_PASSWORD:-identity}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@orderflow.local}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-change-me-in-production}
       ZIPKIN_ENDPOINT: http://zipkin:9411/api/v2/spans
@@ -68,6 +74,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_started
+      rabbitmq-users:
+        condition: service_completed_successfully
     networks:
       - orderflow-network
 
@@ -216,6 +224,49 @@ services:
     networks:
       - orderflow-network
 
+  notifications:
+    build:
+      context: .
+      args:
+        MODULE: services/notifications
+    restart: unless-stopped
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/notifications
+      SPRING_DATASOURCE_USERNAME: notifications
+      SPRING_DATASOURCE_PASSWORD: notifications
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_USERNAME: notifications
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_NOTIFICATIONS_PASSWORD:-notifications}
+      MAIL_HOST: mailpit
+      MAIL_PORT: 1025
+      JWK_SET_URI: http://identity:8080/.well-known/jwks.json
+      IDENTITY_URL: http://identity:8080
+      ZIPKIN_ENDPOINT: http://zipkin:9411/api/v2/spans
+      JAVA_TOOL_OPTIONS: -Xmx256m
+    healthcheck:
+      test: ["CMD", "curl", "-fs", "http://localhost:8080/actuator/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 40
+      start_period: 30s
+    depends_on:
+      mysql:
+        condition: service_healthy
+      rabbitmq-users:
+        condition: service_completed_successfully
+      mailpit:
+        condition: service_started
+    networks:
+      - orderflow-network
+
+  mailpit:
+    image: axllent/mailpit:v1.32.0
+    restart: unless-stopped
+    ports:
+      - "8025:8025"
+    networks:
+      - orderflow-network
+
   wiremock:
     image: wiremock/wiremock:3.9.1
     restart: unless-stopped
@@ -311,6 +362,8 @@ services:
       RABBITMQ_ORDERS_PASSWORD: ${RABBITMQ_ORDERS_PASSWORD:-orders}
       RABBITMQ_PAYMENT_PASSWORD: ${RABBITMQ_PAYMENT_PASSWORD:-payment}
       RABBITMQ_SALES_PASSWORD: ${RABBITMQ_SALES_PASSWORD:-sales}
+      RABBITMQ_IDENTITY_PASSWORD: ${RABBITMQ_IDENTITY_PASSWORD:-identity}
+      RABBITMQ_NOTIFICATIONS_PASSWORD: ${RABBITMQ_NOTIFICATIONS_PASSWORD:-notifications}
     volumes:
       - ./docker/rabbitmq/users.sh:/users.sh:ro
     depends_on:

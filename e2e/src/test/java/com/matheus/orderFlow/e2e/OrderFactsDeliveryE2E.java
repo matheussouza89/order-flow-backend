@@ -5,8 +5,10 @@ import org.junit.jupiter.api.Test;
 import org.testcontainers.containers.Container;
 
 import java.time.Duration;
+import java.util.List;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class OrderFactsDeliveryE2E extends AbstractE2E {
@@ -33,6 +35,7 @@ class OrderFactsDeliveryE2E extends AbstractE2E {
 
         stop("payment");
         stop("sales");
+        stop("notifications");
         try {
             assertEquals("CONFIRMED", act(delivered, "confirm", customer.bearer()));
             assertEquals("SHIPPED", act(delivered, "ship", admin));
@@ -42,6 +45,7 @@ class OrderFactsDeliveryE2E extends AbstractE2E {
         } finally {
             start("payment");
             start("sales");
+            start("notifications");
         }
 
         Awaitility.await()
@@ -57,5 +61,15 @@ class OrderFactsDeliveryE2E extends AbstractE2E {
         assertEquals(1, chargesFor(cancelled));
         assertEquals(2L, quantitySold(admin, deliveredProduct));
         assertEquals(0L, quantitySold(admin, cancelledProduct));
+
+        List<Mail> mails = Awaitility.await()
+                .atMost(Duration.ofSeconds(60))
+                .until(() -> mailsTo(customer.email()), received -> received.size() >= 5);
+        assertThat(mails).extracting(Mail::subject).containsExactlyInAnyOrder(
+                "Pedido " + delivered + " confirmado",
+                "Pedido " + delivered + " enviado",
+                "Pedido " + delivered + " entregue",
+                "Pedido " + cancelled + " confirmado",
+                "Pedido " + cancelled + " cancelado");
     }
 }

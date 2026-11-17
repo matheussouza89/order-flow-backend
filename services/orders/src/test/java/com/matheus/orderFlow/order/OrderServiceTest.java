@@ -376,7 +376,9 @@ public class OrderServiceTest {
 
         assertEquals(OrderStatus.SHIPPED, order.getStatus());
         verify(orderRepository).saveAndFlush(order);
-        verify(events).publishEvent(any(OrderShippedEvent.class));
+        ArgumentCaptor<OrderShippedEvent> fact = ArgumentCaptor.forClass(OrderShippedEvent.class);
+        verify(events).publishEvent(fact.capture());
+        assertEquals(order.getUserId(), fact.getValue().userId());
     }
 
     @Test
@@ -389,7 +391,9 @@ public class OrderServiceTest {
 
         assertEquals(OrderStatus.DELIVERED, order.getStatus());
         verify(orderRepository).saveAndFlush(order);
-        verify(events).publishEvent(any(OrderDeliveredEvent.class));
+        ArgumentCaptor<OrderDeliveredEvent> fact = ArgumentCaptor.forClass(OrderDeliveredEvent.class);
+        verify(events).publishEvent(fact.capture());
+        assertEquals(order.getUserId(), fact.getValue().userId());
     }
 
     @ParameterizedTest
@@ -403,7 +407,9 @@ public class OrderServiceTest {
 
         assertEquals(OrderStatus.CANCELLED, order.getStatus());
         verify(orderRepository).saveAndFlush(order);
-        verify(events).publishEvent(any(OrderCancelledEvent.class));
+        ArgumentCaptor<OrderCancelledEvent> fact = ArgumentCaptor.forClass(OrderCancelledEvent.class);
+        verify(events).publishEvent(fact.capture());
+        assertEquals(order.getUserId(), fact.getValue().userId());
     }
 
     @ParameterizedTest

@@ -1,9 +1,14 @@
 package com.matheus.orderFlow.user;
 
+import com.matheus.orderFlow.contracts.user.UserEmailChangedEvent;
+import com.matheus.orderFlow.contracts.user.UserFacts;
+import com.matheus.orderFlow.contracts.user.UserRegisteredEvent;
 import com.matheus.orderFlow.shared.exception.DomainValidationException;
 import com.matheus.orderFlow.shared.exception.NotFoundException;
+import com.matheus.orderFlow.shared.outbox.OutboxWriter;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -33,6 +38,9 @@ class UserServiceTest {
     @Mock
     private RefreshTokenService refreshTokenService;
 
+    @Mock
+    private OutboxWriter outboxWriter;
+
     @InjectMocks
     private UserService userService;
 
@@ -50,7 +58,7 @@ class UserServiceTest {
     void shouldCreateUserHashingThePassword() {
         when(userRepository.existsByEmail("matheus@example.com")).thenReturn(false);
         when(passwordEncoder.encode("senhaSegura1")).thenReturn(HASH);
-        when(userRepository.save(any(User.class))).thenAnswer(call -> call.getArgument(0));
+        when(userRepository.saveAndFlush(any(User.class))).thenAnswer(call -> call.getArgument(0));
 
         UserResponse response = userService.createUser(dto());
 
@@ -59,12 +67,26 @@ class UserServiceTest {
     }
 
     @Test
+    void shouldRecordTheRegistrationFact() {
+        when(userRepository.existsByEmail("matheus@example.com")).thenReturn(false);
+        when(passwordEncoder.encode("senhaSegura1")).thenReturn(HASH);
+        when(userRepository.saveAndFlush(any(User.class))).thenAnswer(call -> call.getArgument(0));
+        ArgumentCaptor<UserRegisteredEvent> fact = ArgumentCaptor.forClass(UserRegisteredEvent.class);
+
+        userService.createUser(dto());
+
+        verify(outboxWriter).record(eq(UserFacts.REGISTERED_KEY), fact.capture());
+        assertEquals("matheus@example.com", fact.getValue().email());
+    }
+
+    @Test
     void shouldRejectDuplicatedEmail() {
         when(userRepository.existsByEmail("matheus@example.com")).thenReturn(true);
 
         assertThrows(UserAlreadyExistsException.class, () -> userService.createUser(dto()));
 
-        verify(userRepository, never()).save(any());
+        verify(userRepository, never()).saveAndFlush(any());
+        verifyNoInteractions(outboxWriter);
     }
 
     @Test
@@ -85,7 +107,8 @@ class UserServiceTest {
         assertThrows(DomainValidationException.class, () -> userService.createUser(dto));
 
         verifyNoInteractions(passwordEncoder);
-        verify(userRepository, never()).save(any());
+        verify(userRepository, never()).saveAndFlush(any());
+        verifyNoInteractions(outboxWriter);
     }
 
     @Test
@@ -210,19 +233,35 @@ class UserServiceTest {
         assertThrows(UserAlreadyExistsException.class,
                 () -> userService.updateEmail(id, "outro@example.com"));
 
-        verify(userRepository, never()).save(any());
+        verify(userRepository, never()).saveAndFlush(any());
+        verifyNoInteractions(outboxWriter);
     }
 
     @Test
     void shouldAllowUpdatingToTheSameEmail() {
         UUID id = UUID.randomUUID();
         when(userRepository.findById(id)).thenReturn(Optional.of(user()));
-        when(userRepository.save(any(User.class))).thenAnswer(call -> call.getArgument(0));
+        when(userRepository.saveAndFlush(any(User.class))).thenAnswer(call -> call.getArgument(0));
 
         UserResponse response = userService.updateEmail(id, "matheus@example.com");
 
         assertEquals("matheus@example.com", response.email());
         verify(userRepository, never()).existsByEmail(any());
+        verifyNoInteractions(outboxWriter);
+    }
+
+    @Test
+    void shouldRecordTheNewEmailWhenItChanges() {
+        UUID id = UUID.randomUUID();
+        when(userRepository.findById(id)).thenReturn(Optional.of(user()));
+        when(userRepository.existsByEmail("novo@example.com")).thenReturn(false);
+        when(userRepository.saveAndFlush(any(User.class))).thenAnswer(call -> call.getArgument(0));
+        ArgumentCaptor<UserEmailChangedEvent> fact = ArgumentCaptor.forClass(UserEmailChangedEvent.class);
+
+        userService.updateEmail(id, "novo@example.com");
+
+        verify(outboxWriter).record(eq(UserFacts.EMAIL_CHANGED_KEY), fact.capture());
+        assertEquals("novo@example.com", fact.getValue().email());
     }
 
     @Test

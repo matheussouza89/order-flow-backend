@@ -80,7 +80,7 @@ class OrderViewProjectorTest {
 
     @Test
     void shouldDeferAStatusWhoseOrderIsNotProjectedYet() {
-        OrderShippedEvent shipped = new OrderShippedEvent(UUID.randomUUID(), 2L, Instant.now());
+        OrderShippedEvent shipped = new OrderShippedEvent(UUID.randomUUID(), UUID.randomUUID(), 2L, Instant.now());
         whenOrderIsNotProjected();
 
         projector.on(shipped, null);
@@ -95,7 +95,7 @@ class OrderViewProjectorTest {
 
     @Test
     void shouldSendAStatusToTheDeadLetterQueueAfterTheLastDeferral() {
-        OrderShippedEvent shipped = new OrderShippedEvent(UUID.randomUUID(), 2L, Instant.now());
+        OrderShippedEvent shipped = new OrderShippedEvent(UUID.randomUUID(), UUID.randomUUID(), 2L, Instant.now());
         whenOrderIsNotProjected();
 
         projector.on(shipped, SalesMessagingConfig.MAX_DEFERRALS);

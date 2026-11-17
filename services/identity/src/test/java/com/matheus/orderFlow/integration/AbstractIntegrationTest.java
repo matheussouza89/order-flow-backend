@@ -74,6 +74,7 @@ public abstract class AbstractIntegrationTest {
 
     @BeforeEach
     void cleanDatabase() {
+        jdbcTemplate.execute("DELETE FROM outbox_messages");
         jdbcTemplate.execute("DELETE FROM users");
 
         redisConnectionFactory.getConnection().serverCommands().flushDb();
