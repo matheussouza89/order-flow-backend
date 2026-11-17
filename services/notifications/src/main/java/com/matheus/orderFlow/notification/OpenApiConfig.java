@@ -24,15 +24,17 @@ import org.springframework.context.annotation.Configuration;
                 contact = @Contact(name = "Matheus Souza"),
                 description = """
                         ## Purpose
-                        The emails sent to the customer when an order is confirmed, and what became
-                        of each one. Every route is for administrators.
+                        The emails sent to the customer when an order is confirmed, shipped,
+                        delivered or cancelled, and what became of each one. Every route is for
+                        administrators.
 
                         ## Where a notification comes from
                         This service learns about an order from the facts the orders service
                         publishes, never from a call, and about the customer's email from the facts
                         the identity service publishes. If it is down, orders keep working, and the
                         emails go out when it comes back. The same fact arriving twice sends one
-                        email.
+                        email, and a status that arrives after a newer one was already emailed is
+                        not sent: it ends as `SUPERSEDED`.
 
                         The customers registered before this service existed are copied once, when
                         it starts operating, by an administrator calling

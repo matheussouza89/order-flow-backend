@@ -112,6 +112,16 @@ class NotificationTest {
     }
 
     @Test
+    void shouldBeSupersededByANewerStatusAlreadySent() {
+        Notification notification = new Notification(ORDER, OrderStatus.SHIPPED, 2L, USER, null, NOW);
+
+        notification.superseded();
+
+        assertEquals(NotificationState.SUPERSEDED, notification.getState());
+        assertThrows(InvalidStatusTransitionException.class, notification::sent);
+    }
+
+    @Test
     void shouldNotChangeAfterReachingAFinalState() {
         Notification notification = confirmation();
         notification.sent();

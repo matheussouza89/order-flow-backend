@@ -24,6 +24,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -51,7 +52,7 @@ class NotificationSenderTest {
         notification = new Notification(UUID.randomUUID(), OrderStatus.CONFIRMED, 1L, USER,
                 new BigDecimal("150.00"), Instant.now());
         ReflectionTestUtils.setField(notification, "id", UUID.randomUUID());
-        when(notificationService.due()).thenReturn(List.of(notification));
+        lenient().when(notificationService.due()).thenReturn(List.of(notification));
     }
 
     @Test
@@ -75,6 +76,30 @@ class NotificationSenderTest {
 
         verify(mailSender, never()).send(any(SimpleMailMessage.class));
         verify(notificationService).recordNoRecipient(notification.getId());
+    }
+
+    @Test
+    void shouldNotSendAStatusOvertakenByANewerOneAlreadySent() {
+        when(notificationService.supersedeIfOvertaken(notification.getId())).thenReturn(true);
+
+        sender.sendDue();
+
+        verify(mailSender, never()).send(any(SimpleMailMessage.class));
+        verify(notificationService, never()).recordSent(any());
+        verify(notificationService, never()).recordNoRecipient(any());
+    }
+
+    @Test
+    void shouldCountAnAttemptWithoutSendingWhenTheFactDidNotNameTheCustomer() {
+        Notification anonymous = new Notification(UUID.randomUUID(), OrderStatus.SHIPPED, 2L, null, null,
+                Instant.now());
+        ReflectionTestUtils.setField(anonymous, "id", UUID.randomUUID());
+        when(notificationService.due()).thenReturn(List.of(anonymous));
+
+        sender.sendDue();
+
+        verify(mailSender, never()).send(any(SimpleMailMessage.class));
+        verify(notificationService).recordNoRecipient(anonymous.getId());
     }
 
     @Test

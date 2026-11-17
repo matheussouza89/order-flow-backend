@@ -179,7 +179,7 @@ public class OrderService {
         orderRepository.saveAndFlush(order);
 
         events.publishEvent(
-                new OrderShippedEvent(order.getId(), order.getVersion(), order.getUpdatedAt())
+                new OrderShippedEvent(order.getId(), order.getUserId(), order.getVersion(), order.getUpdatedAt())
         );
 
         log.info("Order transitioned: id={} from={} to={}",
@@ -197,7 +197,7 @@ public class OrderService {
         orderRepository.saveAndFlush(order);
 
         events.publishEvent(
-                new OrderDeliveredEvent(order.getId(), order.getVersion(), order.getUpdatedAt())
+                new OrderDeliveredEvent(order.getId(), order.getUserId(), order.getVersion(), order.getUpdatedAt())
         );
 
         log.info("Order transitioned: id={} from={} to={}",
@@ -215,7 +215,7 @@ public class OrderService {
         orderRepository.saveAndFlush(order);
 
         events.publishEvent(
-                new OrderCancelledEvent(order.getId(), order.getVersion(), order.getUpdatedAt())
+                new OrderCancelledEvent(order.getId(), order.getUserId(), order.getVersion(), order.getUpdatedAt())
         );
 
         log.info("Order transitioned: id={} from={} to={}",

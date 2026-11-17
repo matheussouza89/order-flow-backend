@@ -62,8 +62,8 @@ class OrderViewProjectionIT extends AbstractIntegrationTest {
     void shouldIgnoreAStatusOlderThanTheStoredOne() {
         UUID orderId = UUID.randomUUID();
         publish(OrderFacts.CONFIRMED_KEY, confirmed(orderId, 1L));
-        publish(OrderFacts.DELIVERED_KEY, new OrderDeliveredEvent(orderId, 3L, Instant.now()));
-        publish(OrderFacts.SHIPPED_KEY, new OrderShippedEvent(orderId, 2L, Instant.now()));
+        publish(OrderFacts.DELIVERED_KEY, new OrderDeliveredEvent(orderId, UUID.randomUUID(), 3L, Instant.now()));
+        publish(OrderFacts.SHIPPED_KEY, new OrderShippedEvent(orderId, UUID.randomUUID(), 2L, Instant.now()));
         awaitSentinel();
 
         Document view = viewOf(orderId);
@@ -75,7 +75,7 @@ class OrderViewProjectionIT extends AbstractIntegrationTest {
     @Test
     void shouldApplyAStatusThatArrivesBeforeItsConfirmation() {
         UUID orderId = UUID.randomUUID();
-        publish(OrderFacts.SHIPPED_KEY, new OrderShippedEvent(orderId, 2L, Instant.now()));
+        publish(OrderFacts.SHIPPED_KEY, new OrderShippedEvent(orderId, UUID.randomUUID(), 2L, Instant.now()));
         publish(OrderFacts.CONFIRMED_KEY, confirmed(orderId, 1L));
 
         Awaitility.await().atMost(Duration.ofSeconds(60)).until(() -> {
@@ -94,7 +94,7 @@ class OrderViewProjectionIT extends AbstractIntegrationTest {
                 .to(new TopicExchange(RabbitMqConfig.EXCHANGE)).with(OrderFacts.SHIPPED_KEY));
         UUID orderId = UUID.randomUUID();
 
-        publish(OrderFacts.SHIPPED_KEY, new OrderShippedEvent(orderId, 2L, Instant.now()));
+        publish(OrderFacts.SHIPPED_KEY, new OrderShippedEvent(orderId, UUID.randomUUID(), 2L, Instant.now()));
         publish(OrderFacts.CONFIRMED_KEY, confirmed(orderId, 1L));
         Awaitility.await().atMost(Duration.ofSeconds(60)).until(() -> {
             Document view = viewOf(orderId);
@@ -108,8 +108,8 @@ class OrderViewProjectionIT extends AbstractIntegrationTest {
     void shouldFollowTheOrderThroughEachTransition() {
         UUID orderId = UUID.randomUUID();
         publish(OrderFacts.CONFIRMED_KEY, confirmed(orderId, 1L));
-        publish(OrderFacts.SHIPPED_KEY, new OrderShippedEvent(orderId, 2L, Instant.now()));
-        publish(OrderFacts.DELIVERED_KEY, new OrderDeliveredEvent(orderId, 3L, Instant.now()));
+        publish(OrderFacts.SHIPPED_KEY, new OrderShippedEvent(orderId, UUID.randomUUID(), 2L, Instant.now()));
+        publish(OrderFacts.DELIVERED_KEY, new OrderDeliveredEvent(orderId, UUID.randomUUID(), 3L, Instant.now()));
 
         Awaitility.await().atMost(Duration.ofSeconds(40)).until(() -> {
             Document view = viewOf(orderId);

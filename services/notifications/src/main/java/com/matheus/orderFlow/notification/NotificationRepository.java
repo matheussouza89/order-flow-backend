@@ -12,6 +12,8 @@ interface NotificationRepository extends JpaRepository<Notification, UUID> {
 
     boolean existsByOrderIdAndOrderStatus(UUID orderId, OrderStatus orderStatus);
 
+    boolean existsByOrderIdAndStateAndOrderVersionGreaterThan(UUID orderId, NotificationState state, Long orderVersion);
+
     List<Notification> findTop50ByStateAndNextAttemptAtLessThanEqualOrderByOrderVersion(
             NotificationState state, Instant now);
 

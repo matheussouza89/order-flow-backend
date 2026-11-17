@@ -108,6 +108,11 @@ class Notification {
         state = NotificationState.SENT;
     }
 
+    void superseded() {
+        requirePending();
+        state = NotificationState.SUPERSEDED;
+    }
+
     void failed(String error, Instant now) {
         requirePending();
         lastError = error.length() > LAST_ERROR_MAX_LENGTH ? error.substring(0, LAST_ERROR_MAX_LENGTH) : error;

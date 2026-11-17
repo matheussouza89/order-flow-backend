@@ -55,6 +55,13 @@ class FactFormatTest {
     }
 
     @Test
+    void shouldNameTheOwnerOfTheOrderInEveryStatusChange() {
+        assertThat(fieldsOf(OrderShippedEvent.class)).containsEntry("userId", UUID.class);
+        assertThat(fieldsOf(OrderDeliveredEvent.class)).containsEntry("userId", UUID.class);
+        assertThat(fieldsOf(OrderCancelledEvent.class)).containsEntry("userId", UUID.class);
+    }
+
+    @Test
     void shouldPublishEachFactUnderItsVersionedId() {
         assertEquals(Map.of(
                 "order.confirmed.v1", OrderConfirmedEvent.class,

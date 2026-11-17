@@ -42,6 +42,7 @@ Consumidores: `sales`, `notifications`.
 | Campo | Tipo |
 |---|---|
 | `orderId` | UUID |
+| `userId` | UUID, dono do pedido; acrescentado pela spec 002 e nulo em mensagem anterior a ela |
 | `version` | inteiro |
 | `occurredAt` | instante (UTC) |
 

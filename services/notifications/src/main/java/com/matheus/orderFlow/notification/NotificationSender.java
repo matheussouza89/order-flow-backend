@@ -25,6 +25,10 @@ class NotificationSender {
     }
 
     private void send(Notification notification) {
+        if (notificationService.supersedeIfOvertaken(notification.getId())) {
+            return;
+        }
+
         Optional<String> email = Optional.ofNullable(notification.getUserId()).flatMap(contactService::emailOf);
 
         if (email.isEmpty()) {

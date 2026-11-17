@@ -127,15 +127,15 @@ Pacotes Java em `com.matheus.orderFlow`. O serviço novo fica em
 
 ### Tests for User Story 2
 
-- [ ] T032 [P] [US2] Em `contracts/src/test/java/com/matheus/orderFlow/contracts/order/FactFormatTest.java`, `userId` em `order.shipped.v1` e `order.delivered.v1`; em `FactCompatibilityTest.java`, uma mensagem desses fatos sem `userId` chega com `userId` nulo
-- [ ] T033 [P] [US2] Em `NotificationSenderTest.java`: uma pendente vira `SUPERSEDED`, sem chamar o `MailSender`, quando o mesmo pedido já tem `SENT` com versão maior; `userId` nulo conta como contato ausente
-- [ ] T034 [P] [US2] Criar `services/notifications/src/test/java/com/matheus/orderFlow/integration/OrderProgressNotificationIT.java`: `order.shipped` e `order.delivered` geram duas mensagens, na ordem da versão; com `order.delivered` já enviado, um `order.shipped` atrasado fica `SUPERSEDED` e não sai (SC-004)
+- [X] T032 [P] [US2] Em `contracts/src/test/java/com/matheus/orderFlow/contracts/order/FactFormatTest.java`, `userId` em `order.shipped.v1` e `order.delivered.v1`; em `FactCompatibilityTest.java`, uma mensagem desses fatos sem `userId` chega com `userId` nulo
+- [X] T033 [P] [US2] Em `NotificationSenderTest.java`: uma pendente vira `SUPERSEDED`, sem chamar o `MailSender`, quando o mesmo pedido já tem `SENT` com versão maior; `userId` nulo conta como contato ausente
+- [X] T034 [P] [US2] Criar `services/notifications/src/test/java/com/matheus/orderFlow/integration/OrderProgressNotificationIT.java`: `order.shipped` e `order.delivered` geram duas mensagens, na ordem da versão; com `order.delivered` já enviado, um `order.shipped` atrasado fica `SUPERSEDED` e não sai (SC-004)
 
 ### Implementation for User Story 2
 
-- [ ] T035 [US2] Acrescentar `UUID userId`, depois de `orderId`, em `contracts/.../order/OrderShippedEvent.java` e `OrderDeliveredEvent.java`; em `services/orders/src/main/java/com/matheus/orderFlow/order/OrderService.java`, passar o dono do pedido em `ship` e `deliver`; ajustar os construtores em `services/sales/src/test/java/com/matheus/orderFlow/sales/OrderViewProjectorTest.java`, `services/sales/src/test/java/com/matheus/orderFlow/integration/OrderViewProjectionIT.java` e nos testes do `orders`
-- [ ] T036 [US2] No `notifications`: ligar `order.shipped` e `order.delivered` na fila `order.status.notifications`, tratar os dois fatos em `OrderStatusListener` e aplicar a regra do `SUPERSEDED` em `NotificationSender`, com a consulta em `NotificationRepository`
-- [ ] T037 [US2] Em `specs/003-microsservicos/contracts/events.md`, `userId` nos fatos de envio e entrega (modelo flow-back)
+- [X] T035 [US2] Acrescentar `UUID userId`, depois de `orderId`, em `contracts/.../order/OrderShippedEvent.java` e `OrderDeliveredEvent.java`; em `services/orders/src/main/java/com/matheus/orderFlow/order/OrderService.java`, passar o dono do pedido em `ship` e `deliver`; ajustar os construtores em `services/sales/src/test/java/com/matheus/orderFlow/sales/OrderViewProjectorTest.java`, `services/sales/src/test/java/com/matheus/orderFlow/integration/OrderViewProjectionIT.java` e nos testes do `orders`
+- [X] T036 [US2] No `notifications`: ligar `order.shipped` e `order.delivered` na fila `order.status.notifications`, tratar os dois fatos em `OrderStatusListener` e aplicar a regra do `SUPERSEDED` em `NotificationSender`, com a consulta em `NotificationRepository`
+- [X] T037 [US2] Em `specs/003-microsservicos/contracts/events.md`, `userId` nos fatos de envio e entrega (modelo flow-back)
 
 **Checkpoint**: US1 e US2 funcionam; `./mvnw verify` verde
 
@@ -149,12 +149,12 @@ Pacotes Java em `com.matheus.orderFlow`. O serviço novo fica em
 
 ### Tests for User Story 3
 
-- [ ] T038 [P] [US3] Em `FactFormatTest.java` e `FactCompatibilityTest.java`, `userId` em `order.cancelled.v1`, como na T032
-- [ ] T039 [P] [US3] Criar `services/notifications/src/test/java/com/matheus/orderFlow/integration/OrderCancelledNotificationIT.java`: `order.cancelled` gera a mensagem de cancelamento
+- [X] T038 [P] [US3] Em `FactFormatTest.java` e `FactCompatibilityTest.java`, `userId` em `order.cancelled.v1`, como na T032
+- [X] T039 [P] [US3] Criar `services/notifications/src/test/java/com/matheus/orderFlow/integration/OrderCancelledNotificationIT.java`: `order.cancelled` gera a mensagem de cancelamento
 
 ### Implementation for User Story 3
 
-- [ ] T040 [US3] Acrescentar `UUID userId` em `contracts/.../order/OrderCancelledEvent.java`; passar o dono em `OrderService.cancel`; ajustar os construtores nos testes do `sales` e do `orders`; ligar `order.cancelled` na fila `order.status.notifications` e tratá-lo em `OrderStatusListener`; `userId` no cancelamento em `specs/003-microsservicos/contracts/events.md`
+- [X] T040 [US3] Acrescentar `UUID userId` em `contracts/.../order/OrderCancelledEvent.java`; passar o dono em `OrderService.cancel`; ajustar os construtores nos testes do `sales` e do `orders`; ligar `order.cancelled` na fila `order.status.notifications` e tratá-lo em `OrderStatusListener`; `userId` no cancelamento em `specs/003-microsservicos/contracts/events.md`
 
 **Checkpoint**: as três user stories funcionam; `./mvnw verify` verde
 

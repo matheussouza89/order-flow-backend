@@ -24,7 +24,10 @@ class NotificationMessagingConfig {
     @Bean
     Declarables orderStatusBindings(Queue orderStatusQueue, TopicExchange orderEventsExchange) {
         return new Declarables(
-                BindingBuilder.bind(orderStatusQueue).to(orderEventsExchange).with(OrderFacts.CONFIRMED_KEY)
+                BindingBuilder.bind(orderStatusQueue).to(orderEventsExchange).with(OrderFacts.CONFIRMED_KEY),
+                BindingBuilder.bind(orderStatusQueue).to(orderEventsExchange).with(OrderFacts.SHIPPED_KEY),
+                BindingBuilder.bind(orderStatusQueue).to(orderEventsExchange).with(OrderFacts.DELIVERED_KEY),
+                BindingBuilder.bind(orderStatusQueue).to(orderEventsExchange).with(OrderFacts.CANCELLED_KEY)
         );
     }
 }

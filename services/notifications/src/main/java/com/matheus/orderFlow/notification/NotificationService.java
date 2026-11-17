@@ -34,6 +34,19 @@ public class NotificationService {
     }
 
     @Transactional
+    public boolean supersedeIfOvertaken(UUID id) {
+        Notification notification = find(id);
+
+        if (!notificationRepository.existsByOrderIdAndStateAndOrderVersionGreaterThan(
+                notification.getOrderId(), NotificationState.SENT, notification.getOrderVersion())) {
+            return false;
+        }
+
+        notification.superseded();
+        return true;
+    }
+
+    @Transactional
     public void recordSent(UUID id) {
         find(id).sent();
     }

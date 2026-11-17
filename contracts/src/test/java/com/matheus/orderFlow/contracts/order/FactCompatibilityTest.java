@@ -49,11 +49,11 @@ class FactCompatibilityTest {
                                         new BigDecimal("50.00"))),
                                 1L, OCCURRED_AT)),
                 Arguments.of(OrderFacts.SHIPPED_V1, statusChangeWith("\"trackingCode\": \"BR123\""),
-                        new OrderShippedEvent(ORDER, 3, OCCURRED_AT)),
+                        new OrderShippedEvent(ORDER, null, 3, OCCURRED_AT)),
                 Arguments.of(OrderFacts.DELIVERED_V1, statusChangeWith("\"receivedBy\": \"Portaria\""),
-                        new OrderDeliveredEvent(ORDER, 3, OCCURRED_AT)),
+                        new OrderDeliveredEvent(ORDER, null, 3, OCCURRED_AT)),
                 Arguments.of(OrderFacts.CANCELLED_V1, statusChangeWith("\"reason\": { \"code\": \"CUSTOMER\" }"),
-                        new OrderCancelledEvent(ORDER, 3, OCCURRED_AT)));
+                        new OrderCancelledEvent(ORDER, null, 3, OCCURRED_AT)));
     }
 
     @ParameterizedTest(name = "{0}")
