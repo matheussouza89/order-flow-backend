@@ -69,7 +69,8 @@ class OrderConfirmedNotificationIT extends AbstractIntegrationTest {
         Mail mail = mailsTo(EMAIL).getFirst();
         assertEquals("Pedido " + orderId + " confirmado", mail.subject());
         assertThat(mail.text()).contains("Total: R$ 150,00");
-        assertEquals("SENT", notificationsOf(orderId).getFirst().get("state"));
+        await().atMost(Duration.ofSeconds(10))
+                .untilAsserted(() -> assertEquals("SENT", notificationsOf(orderId).getFirst().get("state")));
     }
 
     @Test
@@ -98,7 +99,8 @@ class OrderConfirmedNotificationIT extends AbstractIntegrationTest {
         jdbcTemplate.update("UPDATE notifications SET next_attempt_at = TIMESTAMP('2000-01-01 00:00:00')");
 
         await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> assertEquals(1, mailsAbout(orderId)));
-        assertEquals("SENT", notificationsOf(orderId).getFirst().get("state"));
+        await().atMost(Duration.ofSeconds(10))
+                .untilAsserted(() -> assertEquals("SENT", notificationsOf(orderId).getFirst().get("state")));
     }
 
     @Test
