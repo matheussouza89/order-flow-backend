@@ -26,6 +26,10 @@ saiu: cadastro, login e emissão de credenciais ficam num serviço só, e o
 monólito, como os outros, apenas verifica. Na sétima, o que restava do monólito
 virou o serviço de pedidos, e o sistema único deixou de existir.
 
+Depois da separação, as notificações nasceram como serviço próprio, como
+especificado em [specs/002-notificacoes](specs/002-notificacoes/spec.md): o
+cliente recebe um e-mail a cada mudança de status do pedido.
+
 ---
 
 ## Stack
@@ -60,21 +64,24 @@ cliente ──► gateway :8080 ──┬──► identity   emite o token; os 
                             ├──► cart ──────► catalog e orders, na finalização
                             ├──► orders ────► catalog, ao criar o pedido
                             ├──► payment
-                            └──► sales
+                            ├──► sales
+                            └──► notifications
 
-orders ── outbox ──► RabbitMQ (orderflow.events) ──┬──► payment   registra a cobrança
-                                                   └──► sales     atualiza os relatórios
+orders ──── outbox ──┬──► RabbitMQ (orderflow.events) ──┬──► payment        registra a cobrança
+identity ── outbox ──┘                                  ├──► sales          atualiza os relatórios
+                                                        └──► notifications  manda o e-mail do pedido
 ```
 
 | Serviço | Responsável por | Dados | Fatos |
 |---|---|---|---|
 | `gateway` | entrada única e página única de documentação | — | — |
-| `identity` | contas, login e emissão de tokens | MySQL `identity`; Redis `refreshToken*` | — |
+| `identity` | contas, login e emissão de tokens | MySQL `identity`, com o outbox; Redis `refreshToken*` | publica o cadastro e a troca de e-mail |
 | `catalog` | produtos | MySQL `catalog` | — |
 | `cart` | carrinho e finalização | Redis `cart*` | — |
 | `orders` | pedidos e ciclo de vida | MySQL `orders`, com o outbox | publica os quatro fatos do pedido |
 | `payment` | cobrança no gateway de pagamento | MySQL `payment` | consome `order.confirmed` |
 | `sales` | relatórios de vendas | MongoDB `orderflow` | consome os quatro fatos |
+| `notifications` | e-mails do pedido ao cliente | MySQL `notifications` | consome os quatro fatos do pedido e os dois de usuário |
 
 Cada serviço entra no MySQL, no Redis, no RabbitMQ e no MongoDB com um usuário
 próprio, que só alcança o que é dele. A posse dos dados é garantida pela
@@ -84,7 +91,8 @@ sentido.
 No Compose, todos os serviços escutam na 8080 dentro da rede, e só o gateway
 publica a porta. A infraestrutura publica as suas para inspeção: MySQL na 3308,
 Redis na 6379, RabbitMQ na 5672 (painel na 15672), MongoDB na 27017, Zipkin na
-9411 e o WireMock do gateway de pagamento na 8090.
+9411, o WireMock do gateway de pagamento na 8090 e o Mailpit, que recebe os
+e-mails, na 8025.
 
 As decisões da separação, com as alternativas descartadas, estão em
 [research.md](specs/003-microsservicos/research.md). As principais:
@@ -104,6 +112,9 @@ As decisões da separação, com as alternativas descartadas, estão em
 - **Rastro** (R11): Zipkin, com o contexto guardado no outbox para atravessar as
   mensagens.
 
+As decisões das notificações estão em
+[research.md](specs/002-notificacoes/research.md) da spec 002.
+
 ---
 
 ## Como rodar
@@ -111,8 +122,8 @@ As decisões da separação, com as alternativas descartadas, estão em
 **Pré-requisito:** Docker.
 
 Suba o projeto inteiro — gateway, serviços de identidade, catálogo, carrinho,
-pedidos, pagamentos e vendas, MySQL, MongoDB, Redis, RabbitMQ, WireMock e
-Zipkin:
+pedidos, pagamentos, vendas e notificações, MySQL, MongoDB, Redis, RabbitMQ,
+WireMock, Mailpit e Zipkin:
 
 ```bash
 docker compose up --build
@@ -135,8 +146,9 @@ serve para qualquer ambiente.
 | `ADMIN_EMAIL` | identifica o administrador criado na primeira subida |
 | `ADMIN_PASSWORD` | a senha dele; com o padrão, o log avisa na subida |
 | `REDIS_IDENTITY_PASSWORD`, `REDIS_CART_PASSWORD` | senhas dos usuários do Redis; o padrão é o nome do usuário |
-| `RABBITMQ_ORDERS_PASSWORD`, `RABBITMQ_PAYMENT_PASSWORD`, `RABBITMQ_SALES_PASSWORD` | senhas dos usuários do RabbitMQ; o padrão é o nome do usuário |
+| `RABBITMQ_ORDERS_PASSWORD`, `RABBITMQ_PAYMENT_PASSWORD`, `RABBITMQ_SALES_PASSWORD`, `RABBITMQ_IDENTITY_PASSWORD`, `RABBITMQ_NOTIFICATIONS_PASSWORD` | senhas dos usuários do RabbitMQ; o padrão é o nome do usuário |
 | `MONGO_ROOT_PASSWORD`, `MONGO_SALES_PASSWORD` | senhas do root e do usuário `sales` do MongoDB; o padrão é o nome do usuário |
+| `MAIL_HOST`, `MAIL_PORT`, `MAIL_FROM` | servidor de e-mail e remetente das notificações; o padrão é o Mailpit do Compose, que não entrega a ninguém |
 | `CORS_ALLOWED_ORIGINS` | origens, separadas por vírgula, de onde o navegador pode chamar a API; o padrão é o frontend local em `http://localhost:5173` |
 
 O administrador é criado automaticamente quando não existe nenhum, então subir
@@ -239,6 +251,15 @@ docker compose exec -T mongo mongosh --quiet -u root -p root --authenticationDat
 
 Com `MONGO_ROOT_PASSWORD` definida, use a mesma senha no lugar de `root`.
 
+O schema `notifications` vem do mesmo script de schemas do MySQL; num volume
+antigo, aplique-o de novo, como acima. Os clientes cadastrados antes das
+notificações nunca publicaram o fato de cadastro, então entram uma vez, por um
+administrador:
+
+```bash
+curl -X POST http://localhost:8080/admin/notifications/contacts/import -H "Authorization: Bearer $ADMIN_TOKEN"
+```
+
 Para desenvolver com os serviços fora do container (Java 21 necessário), suba
 só a infraestrutura e rode os módulos pelo Maven. O serviço de pedidos atende
 direto na porta 8080 e não precisa do MongoDB, que é só do serviço de vendas. A
@@ -274,6 +295,7 @@ SPRING_DATA_REDIS_USERNAME=cart SPRING_DATA_REDIS_PASSWORD=cart JWK_SET_URI=http
 | Swagger UI | http://localhost:8080/swagger-ui.html |
 | Health check | http://localhost:8080/actuator/health |
 | Rastros (Zipkin) | http://localhost:9411 |
+| E-mails (Mailpit) | http://localhost:8025 |
 
 ---
 
@@ -286,22 +308,23 @@ alteração:
 ./mvnw test
 ```
 
-Roda os **271 testes unitários** em poucos segundos, sem Docker.
+Roda os **305 testes unitários** em poucos segundos, sem Docker.
 
 ```bash
 ./mvnw verify
 ```
 
-Roda os unitários **mais os 221 de integração**, que sobem MySQL, MongoDB, Redis e
-RabbitMQ reais via Testcontainers, e um WireMock fazendo as vezes do gateway de
-pagamento, do catálogo, do serviço de pedidos, do serviço atrás da entrada única
-ou da exportação de pedidos.
+Roda os unitários **mais os 248 de integração**, que sobem MySQL, MongoDB, Redis e
+RabbitMQ reais via Testcontainers, um Mailpit no lugar do servidor de e-mail, e um
+WireMock fazendo as vezes do gateway de pagamento, do catálogo, do serviço de
+pedidos, do serviço atrás da entrada única ou da exportação de pedidos e de
+usuários.
 
 ```bash
 ./mvnw verify -Pe2e -pl e2e -am
 ```
 
-Roda os **58 testes ponta a ponta**, que constroem as imagens, sobem o Compose
+Roda os **70 testes ponta a ponta**, que constroem as imagens, sobem o Compose
 inteiro pelo Testcontainers e falam com o sistema pela porta 8080, como um
 cliente. São eles que provam o que só aparece com os serviços juntos: todas as
 rotas respondendo pela entrada única, a chamada direta sem credencial recusada,
@@ -310,8 +333,10 @@ serviços de vendas e de pagamentos parados, a cobrança feita uma vez só quand
 o serviço volta, a finalização recusada no prazo com o catálogo ou o serviço de
 pedidos parados, um pedido só quando ela é repetida, a credencial aceita com a
 identidade parada, o refresh token de antes da extração renovado sem senha, a
-compra inteira do cadastro ao relatório, os fatos do pedido entregues uma vez aos
-serviços que estavam parados, o rastro de cada requisição no Zipkin, com o passo
+compra inteira do cadastro ao relatório e aos e-mails, os fatos do pedido
+entregues uma vez aos serviços que estavam parados, os pedidos funcionando com
+pagamentos, vendas e notificações parados ao mesmo tempo, os e-mails chegando
+depois que o servidor de e-mail volta, o rastro de cada requisição no Zipkin, com o passo
 que falhou, e cada usuário do MySQL, do Redis, do RabbitMQ e do MongoDB sem
 acesso aos dados dos outros. Usam as mesmas portas do Compose, então a pilha de
 desenvolvimento precisa estar parada.
@@ -319,19 +344,20 @@ desenvolvimento precisa estar parada.
 | Módulo | Unitários | Integração | Ponta a ponta |
 |---|---|---|---|
 | `orders` | 52 | 66 | — |
-| `identity` | 79 | 47 | — |
+| `identity` | 81 | 57 | — |
 | `catalog` | 43 | 19 | — |
 | `cart` | 15 | 22 | — |
 | `payment` | 30 | 10 | — |
 | `sales` | 5 | 27 | — |
-| `gateway` | 2 | 30 | — |
+| `gateway` | 2 | 32 | — |
+| `notifications` | 27 | 15 | — |
 | `platform-outbox` | 16 | — | — |
-| `contracts` | 10 | — | — |
+| `contracts` | 15 | — | — |
 | `platform-web` | 6 | — | — |
 | `platform-security` | 6 | — | — |
 | `platform-messaging` | 5 | — | — |
 | `platform-test` | 2 | — | — |
-| `e2e` | — | — | 58 |
+| `e2e` | — | — | 70 |
 
 A separação é feita por convenção de nome: o Surefire pega só `*Test.java`, o
 Failsafe pega `*IT.java`. O teste que sobe o contexto inteiro do serviço de
@@ -1154,7 +1180,7 @@ container, acrescentado na separação em serviços, foi o que mostrou.
 
 O monólito foi separado em serviços, um por capacidade: identidade, catálogo,
 carrinho, pedidos, pagamentos e relatórios de vendas; as notificações, da spec
-002, vão nascer como serviço. A
+002, nasceram como serviço depois. A
 motivação é aprender e demonstrar arquitetura distribuída, não escala: as
 fronteiras já existiam no código, e agregados já se referenciavam por `UUID`. A
 alternativa mais forte, um monólito modular, custa muito menos e fica registrada
@@ -1505,8 +1531,8 @@ enviado e entregue e outro é confirmado e cancelado. Quando os dois voltam, cad
 um recebe todos os fatos uma vez só: uma cobrança por confirmação, a quantidade
 do pedido entregue contada uma vez, e o cancelado fora dos relatórios. Os
 relatórios não mostram status, então o teste lê a projeção no MongoDB para saber
-que o último fato chegou. As notificações, da spec 002, ainda não existem; quando
-chegarem, entram nos dois cenários.
+que o último fato chegou. As notificações, que vieram depois, entram nos dois
+cenários: cada e-mail do pedido chega uma vez.
 
 ### Usuário por serviço também na mensageria e no MongoDB
 
@@ -1516,8 +1542,9 @@ usuário, e o Mongo não pedia credencial. Ali, a posse dos dados valia só por
 convenção.
 
 No RabbitMQ, cada serviço ganhou um usuário com permissão só nos próprios
-recursos. Só o `orders` escreve na exchange dos fatos; o `payment` e o `sales`
-declaram e consomem as próprias filas, e nenhum lê a fila do outro. Os usuários
+recursos. Só o `orders` escrevia na exchange dos fatos, hoje dividida com o
+`identity` (veja as notificações, abaixo); o `payment` e o `sales` declaram e
+consomem as próprias filas, e nenhum lê a fila do outro. Os usuários
 são criados por um container que roda uma vez a cada subida e chama a API de
 administração do broker. O arquivo de definições do RabbitMQ, o caminho mais
 óbvio, não lê variável de ambiente, e a senha precisa vir de uma.
@@ -1526,9 +1553,9 @@ Restringir as permissões mostrou um problema que estava escondido. A fila de
 espera do `sales`, onde fica um status que chega antes da confirmação, devolvia o
 fato para a exchange dos fatos ao fim do prazo. Para declarar a fila assim, o
 `sales` precisaria de escrita na exchange que só o `orders` deve usar. E o fato
-devolvido chegava de novo a todo consumidor daquela chave: hoje só o `sales`
-escuta envio, entrega e cancelamento, mas as notificações receberiam cada status
-adiado duas vezes. A fila passou a devolver por uma exchange do próprio `sales`,
+devolvido chegava de novo a todo consumidor daquela chave: na época só o
+`sales` escutava envio, entrega e cancelamento, mas as notificações, que vieram
+depois, receberiam cada status adiado duas vezes. A fila passou a devolver por uma exchange do próprio `sales`,
 ligada só à fila da projeção. A exchange padrão do RabbitMQ faria o mesmo sem
 exchange nova, mas escrever nela permite publicar em qualquer fila pelo nome,
 inclusive na do `payment`. Um teste de integração liga um segundo consumidor à
@@ -1540,6 +1567,53 @@ cada um, que o broker recusa o consumo e a publicação fora da permissão e que
 Mongo recusa a leitura sem credencial. A conexão abre antes da operação recusada,
 de propósito: um login recusado também responde `ACCESS_REFUSED`, e sem isso o
 teste passaria antes de os usuários existirem.
+
+### Notificações: gravar antes de enviar
+
+As notificações são o primeiro serviço que nasceu depois da separação. Ele
+consome os fatos do pedido que o `orders` já publicava e manda um e-mail a cada
+mudança de status. A falha do e-mail não alcança o pedido: o serviço só escuta,
+e nenhum outro depende dele. As decisões, com as alternativas, estão em
+[research.md](specs/002-notificacoes/research.md).
+
+O fato do pedido não é enviado na hora em que chega. O listener só grava a
+notificação, e um envio periódico, no molde do relay do outbox, manda o e-mail.
+Enviar no próprio listener parecia mais simples, mas com o servidor de e-mail
+fora a mensagem esgotaria as tentativas do container e iria para a DLQ, levando
+junto o registro de quantas vezes se tentou. Gravando antes, o fato sai da fila e
+a tentativa fica no banco: até cinco, com a espera dobrando a partir de 30
+segundos. As que desistem aparecem para o administrador em
+`GET /admin/notifications`. Uma restrição única por pedido e status faz o mesmo
+fato, entregue duas vezes, gravar uma notificação só.
+
+O e-mail do cliente não viaja nos fatos do pedido. O `identity` passou a publicar
+o cadastro e a troca de e-mail pelo próprio outbox, e as notificações guardam uma
+cópia do e-mail vigente. A cópia só é trocada por um instante mais novo, então
+um fato atrasado não volta o e-mail antigo. Os clientes de antes do serviço nunca
+publicaram o cadastro; entram por uma carga que o administrador dispara, como a
+reconstrução dos relatórios, porque não existe credencial de serviço para fazer
+isso sozinho na subida.
+
+Os fatos de envio, entrega e cancelamento passaram a levar o `userId`, como a
+confirmação já levava. Sem ele, o serviço teria de descobrir o dono do pedido, e
+o envio pode chegar antes da confirmação, ou um pedido pendente ser cancelado
+sem nunca ter sido confirmado. O campo só acrescenta, e o `sales` segue igual.
+A versão do pedido, que já vinha em todos os fatos, impede o status antigo de
+sair depois do novo: um envio que chega quando a entrega já foi avisada não sai.
+
+Com o `identity` escrevendo na exchange dos fatos, a permissão comum do RabbitMQ
+deixaria qualquer um dos dois publicar qualquer fato: ela vale para a exchange
+inteira, não por chave. Um `order.confirmed` falso publicado pelo `identity`
+chegaria à cobrança. A permissão por chave de roteamento do próprio broker
+fecha isso: o `orders` só publica `order.*`, e o `identity`, `user.*`. O teste
+ponta a ponta de posse dos dados confere as duas recusas.
+
+Dois detalhes vieram dos testes. O health check do serviço deixa o servidor de
+e-mail de fora: com ele, o Mailpit parado tiraria o serviço do ar para o Compose
+e travaria a subida do gateway. E o nome com que o serviço se apresenta ao
+servidor de e-mail é fixo. Sem isso, o JavaMail resolve o nome da máquina a cada
+e-mail; no Windows de desenvolvimento cada resolução levava 5 segundos, e os
+testes de integração falhavam ao acaso esperando um e-mail atrasado.
 
 ## Endpoints
 
@@ -1657,6 +1731,18 @@ mesma versão não contam.
 
 ---
 
+**Notificações (somente ADMIN)**
+
+| Método | Rota | Status | Descrição |
+|---|---|---|---|
+| `GET` | `/admin/notifications?state=` | 200 / 400 / 403 | Notificações de um estado; sem estado, as que desistiram |
+| `POST` | `/admin/notifications/contacts/import` | 200 / 403 / 503 | Copia o e-mail dos clientes já cadastrados no `identity` |
+
+O e-mail do cliente não aparece na listagem. A carga devolve `{"imported": n}`,
+quantos e-mails foram gravados; repetida, devolve 0.
+
+---
+
 ## Roadmap
 
 **Concluído**
@@ -1680,7 +1766,7 @@ mesma versão não contam.
 - [x] Fila de espera e DLQ para status que chega antes da confirmação
 - [x] Reconstrução da projeção pela exportação do serviço de pedidos
 - [x] Relatórios administrativos de vendas por dia e por produto
-- [x] 550 testes, separados por velocidade (unitários, integração e ponta a ponta)
+- [x] 623 testes, separados por velocidade (unitários, integração e ponta a ponta)
 - [x] Separação em serviços, etapa 1: entrada única, credencial RS256 com JWKS,
   fatos com tipo versionado, rastreamento com Zipkin e linha de base de carga
 - [x] Separação em serviços, etapa 2: relatórios de vendas como serviço próprio,
@@ -1699,15 +1785,15 @@ mesma versão não contam.
   consumidor da versão anterior, usuário por serviço também no RabbitMQ e no
   MongoDB, e teste de carga medido contra a linha de base
 - [x] CORS na entrada única, com as origens do frontend por variável de ambiente
+- [x] Notificações como serviço próprio (spec 002): um e-mail a cada status do
+  pedido, com tentativas, carga inicial dos clientes e permissão por chave na
+  exchange dos fatos
+- [x] Falha isolada com pagamentos, vendas e notificações parados ao mesmo tempo
 - [x] Pipeline de CI rodando `mvn verify` a cada push
 - [x] Imagem da aplicação e stack completa em Docker, com conexões por variável de ambiente
 - [x] Documentação OpenAPI
 
 **Próximos passos**
 
-- [ ] Notificações como serviço próprio (spec 002), consumindo os fatos do pedido
-  e do usuário
-- [ ] Falha isolada com pagamentos, vendas e notificações parados ao mesmo tempo,
-  que depende das notificações
 - [ ] Trazer o p95 da finalização para no máximo o dobro da linha de base (SC-015)
 

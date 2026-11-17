@@ -68,9 +68,10 @@ import org.springframework.context.annotation.Configuration;
                         what prevents the operation is the current state of the resource.
 
                         ## Who else learns about it
-                        Every action publishes a fact that the payments and sales services
-                        consume: confirming registers the charge, and the reports count the
-                        sale. The fact is saved together with the order and published
+                        Every action publishes a fact that the payments, sales and notifications
+                        services consume: confirming registers the charge, the reports count the
+                        sale, and the buyer gets an email at each change of status. The fact is
+                        saved together with the order and published
                         afterwards, so an action never waits for those services, and one
                         that happens while they are down reaches them when they come back.
 
