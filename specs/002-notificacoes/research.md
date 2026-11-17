@@ -144,6 +144,12 @@ descartadas, como pede o princípio I da constituição. As referências "R da s
   de e-mail, que o starter acrescenta por padrão: com ele, o e-mail fora deixaria o
   `notifications` fora do ar para o Compose e travaria a subida do gateway, que
   depende do health. A queda do e-mail aparece nas tentativas (R6 e R9).
+  O nome com que o serviço se apresenta ao servidor (`mail.smtp.localhost`) e o
+  remetente da sessão (`mail.from`) são fixos: sem eles, o JavaMail resolve o nome
+  da máquina no EHLO e no `Message-ID` de cada e-mail. No Windows de
+  desenvolvimento, cada resolução levava cerca de 5 segundos, e os testes de
+  integração falhavam ao acaso esperando um e-mail que saía com 10 segundos de
+  atraso.
 - **Alternativas consideradas**: Thymeleaf (dependência para quatro frases);
   GreenMail em memória (uma segunda ferramenta além da do Compose); MailHog (sem
   manutenção).
