@@ -37,6 +37,12 @@ spring:
       mail.smtp.localhost: orderflow.local
       mail.from: ${orderflow.notifications.mail.from}
 
+  http:
+    serviceclient:
+      identity:
+        base-url: ${IDENTITY_URL:http://identity:8080}
+        read-timeout: 10s
+
   security:
     oauth2:
       resourceserver:

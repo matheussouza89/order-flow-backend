@@ -3,11 +3,15 @@ package com.matheus.orderFlow.user;
 import com.matheus.orderFlow.contracts.user.UserEmailChangedEvent;
 import com.matheus.orderFlow.contracts.user.UserFacts;
 import com.matheus.orderFlow.contracts.user.UserRegisteredEvent;
+import com.matheus.orderFlow.shared.exception.DomainValidationException;
 import com.matheus.orderFlow.shared.exception.NotFoundException;
 import com.matheus.orderFlow.shared.outbox.OutboxWriter;
+import com.matheus.orderFlow.shared.web.PageResponse;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,6 +24,8 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class UserService {
     private static final String ABSENT_USER_PLACEHOLDER = "there-is-no-user-with-this-email";
+    private static final int MAX_EXPORT_SIZE = 500;
+    private static final Sort REGISTRATION_ORDER = Sort.by("createdAt", "id");
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
@@ -53,6 +59,19 @@ public class UserService {
     @Transactional(readOnly = true)
     public UserResponse getUser(UUID id) {
         return UserResponse.from(findOrThrow(id));
+    }
+
+    @Transactional(readOnly = true)
+    public PageResponse<UserExportResponse> export(int page, int size) {
+        if (page < 0) {
+            throw new DomainValidationException("page", "Page must not be negative");
+        }
+        if (size < 1 || size > MAX_EXPORT_SIZE) {
+            throw new DomainValidationException("size", "Size must be between 1 and " + MAX_EXPORT_SIZE);
+        }
+
+        return PageResponse.of(userRepository.findAll(PageRequest.of(page, size, REGISTRATION_ORDER))
+                .map(UserExportResponse::from));
     }
 
     @Transactional

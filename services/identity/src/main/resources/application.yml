@@ -57,3 +57,4 @@ orderflow:
 springdoc:
   paths-to-exclude:
     - /.well-known/**
+    - /internal/**

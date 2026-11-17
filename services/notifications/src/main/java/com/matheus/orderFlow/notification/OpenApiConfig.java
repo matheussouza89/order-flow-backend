@@ -34,6 +34,10 @@ import org.springframework.context.annotation.Configuration;
                         emails go out when it comes back. The same fact arriving twice sends one
                         email.
 
+                        The customers registered before this service existed are copied once, when
+                        it starts operating, by an administrator calling
+                        `POST /admin/notifications/contacts/import`.
+
                         ## Attempts
                         A notification starts as `PENDING` and is sent within a few seconds. When
                         the mail server fails, or the customer's email is not known yet, it waits

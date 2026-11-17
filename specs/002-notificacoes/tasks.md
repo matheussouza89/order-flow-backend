@@ -106,14 +106,14 @@ Pacotes Java em `com.matheus.orderFlow`. O serviço novo fica em
 
 ### Tests
 
-- [ ] T027 [P] Criar `services/identity/src/test/java/com/matheus/orderFlow/integration/UserExportIT.java`: `GET /internal/users/export` responde 403 para `USER`; pagina na ordem do cadastro; cada item tem só `userId`, `email` e `updatedAt`, sem hash, papel ou nome no JSON
-- [ ] T028 [P] Criar `services/notifications/src/test/java/com/matheus/orderFlow/integration/ContactImportIT.java`, com o `identity` no WireMock: a carga percorre todas as páginas repassando a credencial de quem chamou e responde `imported`; a segunda responde 0; um contato mais novo, vindo de fato, não é sobrescrito; com o `identity` fora, responde 503 e o que já foi gravado fica
-- [ ] T029 [P] Criar `services/notifications/src/test/java/com/matheus/orderFlow/contact/ContactImportControllerTest.java` (`@WebMvcTest`): 403 para `USER`, 200 com `{"imported": n}` para `ADMIN`
+- [X] T027 [P] Criar `services/identity/src/test/java/com/matheus/orderFlow/integration/UserExportIT.java`: `GET /internal/users/export` responde 403 para `USER`; pagina na ordem do cadastro; cada item tem só `userId`, `email` e `updatedAt`, sem hash, papel ou nome no JSON
+- [X] T028 [P] Criar `services/notifications/src/test/java/com/matheus/orderFlow/integration/ContactImportIT.java`, com o `identity` no WireMock: a carga percorre todas as páginas repassando a credencial de quem chamou e responde `imported`; a segunda responde 0; um contato mais novo, vindo de fato, não é sobrescrito; com o `identity` fora, responde 503 e o que já foi gravado fica; `USER` recebe 403 e nada chega ao `identity`
+- [X] T029 [P] Criar `services/notifications/src/test/java/com/matheus/orderFlow/contact/ContactImportControllerTest.java` (`@WebMvcTest`): 200 com `{"imported": n}`; o 403 para `USER` fica no `ContactImportIT`, que carrega a segurança
 
 ### Implementation
 
-- [ ] T030 No `identity`: `user/UserExportController.java` (`GET /internal/users/export`, `ADMIN`, `page` 0 e `size` 100 como padrão), `user/UserExportResponse.java` e a consulta paginada em `UserService`; `/internal/**` em `springdoc.paths-to-exclude` de `services/identity/src/main/resources/application.yml`
-- [ ] T031 No `notifications`: `spring-boot-starter-restclient` no `pom.xml`, `spring.http.serviceclient.identity.base-url: ${IDENTITY_URL:http://identity:8080}` no `application.yml`, `contact/UserExportClient.java` (`@HttpExchange("/internal/users")`), `contact/IdentityClientConfig.java` (`@ImportHttpServices` do grupo `identity` com `BearerTokenPropagationInterceptor`, como `OrdersClientConfig` do `sales`), `contact/ContactImportService.java` (páginas de 100, `ContactService.record`, 503 por `ServiceUnavailableException`), `contact/ContactImportController.java` (`POST /admin/notifications/contacts/import`, `ADMIN`) e `contact/ImportResponse.java`
+- [X] T030 No `identity`: `user/UserExportController.java` (`GET /internal/users/export`, `ADMIN`, `page` 0 e `size` 100 como padrão), `user/UserExportResponse.java` e a consulta paginada em `UserService`; `/internal/**` em `springdoc.paths-to-exclude` de `services/identity/src/main/resources/application.yml`
+- [X] T031 No `notifications`: `spring-boot-starter-restclient` no `pom.xml`, `spring.http.serviceclient.identity.base-url: ${IDENTITY_URL:http://identity:8080}` no `application.yml`, `contact/UserExportClient.java` (`@HttpExchange("/internal/users")`), `contact/IdentityClientConfig.java` (`@ImportHttpServices` do grupo `identity` com `BearerTokenPropagationInterceptor`, como `OrdersClientConfig` do `sales`), `contact/ContactImportService.java` (páginas de 100, `ContactService.record`, 503 por `ServiceUnavailableException`), `contact/ContactImportController.java` (`POST /admin/notifications/contacts/import`, `ADMIN`) e `contact/ImportResponse.java`
 
 **Checkpoint**: um cliente antigo, depois da carga, recebe o e-mail de confirmação
 
