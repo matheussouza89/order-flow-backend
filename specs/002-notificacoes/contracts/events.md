@@ -8,7 +8,8 @@ fatos trafegam na exchange `orderflow.events`. Decisões em
 ## Fatos de usuário
 
 Publicados pelo `identity`, sempre pelo outbox. Pacote `contracts.user`, mapa
-`UserFacts.TYPES`.
+`UserFacts.TYPES`. O broker só aceita do `identity` as chaves `user.*`, e do
+`orders`, as `order.*` (R12).
 
 ### `user.registered.v1`
 

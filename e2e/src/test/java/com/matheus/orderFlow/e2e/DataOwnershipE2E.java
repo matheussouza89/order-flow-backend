@@ -35,7 +35,9 @@ class DataOwnershipE2E extends AbstractE2E {
             "catalog, orders.orders",
             "orders, catalog.products",
             "identity, orders.orders",
-            "orders, identity.users"
+            "orders, identity.users",
+            "notifications, identity.users",
+            "orders, notifications.contacts"
     })
     void shouldDenyEachServiceTheTablesOfTheOthers(String user, String table) {
         Container.ExecResult result = runIn("mysql", "mysql", "-u" + user, "-p" + user,
@@ -66,7 +68,10 @@ class DataOwnershipE2E extends AbstractE2E {
             "payment, order.views.projection",
             "sales, order.confirmed.payment",
             "orders, order.confirmed.payment",
-            "orders, order.views.projection"
+            "orders, order.views.projection",
+            "notifications, order.confirmed.payment",
+            "payment, order.status.notifications",
+            "identity, user.contacts.notifications"
     })
     void shouldDenyEachServiceTheQueuesOfTheOthers(String user, String queue) throws Exception {
         try (Connection connection = rabbitAs(user)) {
@@ -78,20 +83,30 @@ class DataOwnershipE2E extends AbstractE2E {
         }
     }
 
-    @ParameterizedTest(name = "{0} publishing an order fact")
-    @ValueSource(strings = {"payment", "sales"})
-    void shouldLetOnlyTheOrdersServicePublishTheOrderFacts(String user) throws Exception {
+    private static void assertRefusedToPublish(String user, String routingKey) throws Exception {
         try (Connection connection = rabbitAs(user)) {
             Channel channel = connection.createChannel();
             channel.confirmSelect();
 
             Exception refused = assertThrows(Exception.class, () -> {
-                channel.basicPublish("orderflow.events", "order.confirmed", null, "{}".getBytes(StandardCharsets.UTF_8));
+                channel.basicPublish("orderflow.events", routingKey, null, "{}".getBytes(StandardCharsets.UTF_8));
                 channel.waitForConfirmsOrDie(5_000);
             });
 
             assertThat(refused).hasStackTraceContaining("ACCESS_REFUSED");
         }
+    }
+
+    @ParameterizedTest(name = "{0} publishing an order fact")
+    @ValueSource(strings = {"payment", "sales", "notifications", "identity"})
+    void shouldLetOnlyTheOrdersServicePublishTheOrderFacts(String user) throws Exception {
+        assertRefusedToPublish(user, "order.confirmed");
+    }
+
+    @ParameterizedTest(name = "{0} publishing a user fact")
+    @ValueSource(strings = {"orders", "notifications"})
+    void shouldLetOnlyTheIdentityServicePublishTheUserFacts(String user) throws Exception {
+        assertRefusedToPublish(user, "user.registered");
     }
 
     @Test

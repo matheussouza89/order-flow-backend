@@ -55,7 +55,7 @@ fatos novos e um campo novo em três fatos; quatro rotas novas
 
 | Princípio | Antes da pesquisa | Depois do desenho |
 |---|---|---|
-| I. Decisões têm motivo escrito | Passa: decisões vão para o research.md | Passa: R1 a R11 com motivo e alternativas |
+| I. Decisões têm motivo escrito | Passa: decisões vão para o research.md | Passa: R1 a R12 com motivo e alternativas |
 | II. Menos código | Risco: serviço novo, retentativa e carga inicial | Passa: o serviço novo já está justificado na spec 003 (FR-002); o e-mail sai pelo `JavaMailSender`, a carga repete o molde do `sales` (R8), o envio repete o do outbox (R5), sem motor de template (R10) |
 | III. Teste em toda mudança | Passa | Passa: os testes mais valiosos afirmam o que não acontece: fato repetido não manda segundo e-mail, status antigo não sai depois do novo, Mailpit parado não para pedido (R11) |
 | IV. O domínio decide | Passa | Passa: a `Notification` decide tentativa, próximo horário e estado final; a `Contact` decide se um e-mail é mais novo |

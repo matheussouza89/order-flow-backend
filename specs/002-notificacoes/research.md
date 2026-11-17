@@ -169,3 +169,16 @@ descartadas, como pede o princípio I da constituição. As referências "R da s
 - **Motivo**: cada camada prova só o que carrega (princípio III).
 - **Alternativas consideradas**: provar a unicidade só no `e2e` (lento e sem
   controle da repetição do fato).
+
+## R12. Permissão por chave na exchange dos fatos
+
+- **Decisão**: o `identity` publica na mesma exchange `orderflow.events`, e a
+  permissão por chave de roteamento do RabbitMQ (topic permissions), criada pelo
+  `rabbitmq-users`, limita o `orders` a `order.*` e o `identity` a `user.*`.
+- **Motivo**: a permissão comum do RabbitMQ vale para a exchange inteira. Com o
+  `identity` escrevendo nela, ele poderia publicar um `order.confirmed`, e a
+  cobrança aconteceria. A permissão por chave mantém a garantia de que só o
+  `orders` publica fatos de pedido, já provada no teste de posse dos dados.
+- **Alternativas consideradas**: exchange própria para os fatos de usuário
+  (separa também, mas cria uma segunda exchange de fatos, com DLX e conversor, e
+  desfaz a decisão de exchange única do R9 da spec 003).
