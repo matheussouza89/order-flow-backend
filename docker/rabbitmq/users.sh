@@ -42,5 +42,6 @@ grant sales "$RABBITMQ_SALES_PASSWORD" \
   '^(orderflow\\.events\\.dl[xq]|orderflow\\.views\\.(wait|return)|order\\.views\\.projection(\\.wait)?)$' \
   '^(orderflow\\.events(\\.dlx)?|orderflow\\.views\\.(wait|return)|order\\.views\\.projection(\\.wait)?)$'
 
+put "exchanges/%2F/orderflow.events" '{"type": "topic", "durable": true}'
 publish_only orders '^order\\.'
 publish_only identity '^user\\.'

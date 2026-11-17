@@ -1605,8 +1605,11 @@ Com o `identity` escrevendo na exchange dos fatos, a permissão comum do RabbitM
 deixaria qualquer um dos dois publicar qualquer fato: ela vale para a exchange
 inteira, não por chave. Um `order.confirmed` falso publicado pelo `identity`
 chegaria à cobrança. A permissão por chave de roteamento do próprio broker
-fecha isso: o `orders` só publica `order.*`, e o `identity`, `user.*`. O teste
-ponta a ponta de posse dos dados confere as duas recusas.
+fecha isso: o `orders` só publica `order.*`, e o `identity`, `user.*`. Essa
+permissão exige que a exchange já exista, e num broker novo quem a declarava eram
+os próprios serviços, que só sobem depois do container que cria os usuários; o
+container passou a declará-la antes. O teste ponta a ponta de posse dos dados
+confere as duas recusas.
 
 Dois detalhes vieram dos testes. O health check do serviço deixa o servidor de
 e-mail de fora: com ele, o Mailpit parado tiraria o serviço do ar para o Compose

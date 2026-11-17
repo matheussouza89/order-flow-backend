@@ -178,7 +178,10 @@ descartadas, como pede o princípio I da constituição. As referências "R da s
 - **Motivo**: a permissão comum do RabbitMQ vale para a exchange inteira. Com o
   `identity` escrevendo nela, ele poderia publicar um `order.confirmed`, e a
   cobrança aconteceria. A permissão por chave mantém a garantia de que só o
-  `orders` publica fatos de pedido, já provada no teste de posse dos dados.
+  `orders` publica fatos de pedido, já provada no teste de posse dos dados. A
+  permissão por chave exige a exchange existente, e num broker novo quem a
+  declarava eram os serviços, que só sobem depois do `rabbitmq-users`; o script
+  passou a declará-la antes, com os mesmos atributos dos serviços.
 - **Alternativas consideradas**: exchange própria para os fatos de usuário
   (separa também, mas cria uma segunda exchange de fatos, com DLX e conversor, e
   desfaz a decisão de exchange única do R9 da spec 003).
