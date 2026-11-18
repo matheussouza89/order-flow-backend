@@ -280,7 +280,7 @@ duplicar pedido.
 
 **Purpose**: critérios que atravessam todas as etapas e limpeza da transição.
 
-- [ ] T108 [P] Criar `e2e/src/test/java/com/matheus/orderFlow/e2e/FailureIsolationE2E.java`: com `payment`, `sales` e `notifications` parados ao mesmo tempo, criar, confirmar, enviar, entregar e cancelar pedidos funciona (SC-002)
+- [X] T108 [P] Criar `e2e/src/test/java/com/matheus/orderFlow/e2e/FailureIsolationE2E.java`: com `payment`, `sales` e `notifications` parados ao mesmo tempo, criar, confirmar, enviar, entregar e cancelar pedidos funciona (SC-002)
 - [X] T109 [P] Criar `e2e/src/test/java/com/matheus/orderFlow/e2e/TraceE2E.java`: pela API do Zipkin (`/api/v2/traces`), o rastro de um checkout mostra `gateway`, `cart`, `orders` e `catalog`; com `catalog` parado, o passo do catálogo aparece com erro, e com `orders` parado, o passo do `orders`; o rastro de uma confirmação chega aos consumidores de `payment` e `sales` (FR-017, SC-010)
 - [X] T110 [P] Criar `contracts/src/test/java/com/matheus/orderFlow/contracts/order/FactCompatibilityTest.java`: um consumidor compilado com a versão anterior de cada fato processa o fato com campos acrescentados (SC-011)
 - [X] T111 Remover os ids legados de `contracts/src/main/java/com/matheus/orderFlow/contracts/order/OrderFacts.java` depois de confirmar que nenhuma fila, nem a DLQ, guarda mensagem com nome de classe no `__TypeId__`, ajustando os casos de id legado em `FactTypeMappingTest.java` e `FactFormatTest.java`
